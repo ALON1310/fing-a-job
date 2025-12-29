@@ -1,11 +1,11 @@
 import os
+import re
 import pandas as pd
 import time
 from playwright.sync_api import sync_playwright
 
 def run_job_seeker_agent():
     with sync_playwright() as p:
-        # Directory for browser persistence
         user_data_dir = os.path.join(os.getcwd(), "user_data")
         
         browser_context = p.chromium.launch_persistent_context(
@@ -16,120 +16,112 @@ def run_job_seeker_agent():
         
         page = browser_context.pages[0] if browser_context.pages else browser_context.new_page()
 
-        # --- PHASE 1: MANUAL LOGIN ---
+        # --- PHASE 1: AUTHENTICATION ---
         print("\n" + "="*50)
         print("PHASE 1: AUTHENTICATION")
         page.goto("https://www.onlinejobs.ph/login", wait_until="networkidle")
-        
-        print("\n>>> ACTION REQUIRED: <<<")
-        print("1. Log in manually in the browser window.")
-        print("2. Once logged in and viewing search results, return here.")
-        input("--- PRESS ENTER HERE TO START DEEP SCRAPING ---")
+        input("\n>>> Login manually, then press ENTER here to start scraping <<<")
         print("="*50 + "\n")
 
-        # --- PHASE 2: SEARCH NAVIGATION ---
-        print("Navigating to search results...")
+        # --- PHASE 2: NAVIGATION & STRICT DEDUPLICATION ---
         page.goto("https://www.onlinejobs.ph/jobseekers/jobsearch", wait_until="networkidle")
         page.wait_for_selector('.results', timeout=20000)
         time.sleep(3)
 
-        print("Starting Precision Extraction...")
+        # Extracting links using numeric ID to avoid duplicates
+        raw_links = page.locator('div.desc a[href*="/jobseekers/job/"]').all()
+        unique_urls = []
+        seen_ids = set()
         
-        job_links = page.locator('div.desc a[href*="/jobseekers/job/"]').all()
-        seen_links = set()
+        for link in raw_links:
+            url = link.get_attribute("href")
+            if url:
+                # Extract the numeric ID at the end of the URL
+                match = re.search(r'(\d+)$', url.split('?')[0].rstrip('/'))
+                if match:
+                    job_id = match.group(1)
+                    if job_id not in seen_ids:
+                        seen_ids.add(job_id)
+                        unique_urls.append(url)
+
+        print(f"Found {len(unique_urls)} unique candidates. Starting Precision Extraction...")
         results = [] 
         
-        for link in job_links:
-            profile_url = link.get_attribute("href")
-            if not profile_url or profile_url in seen_links or "target=" in profile_url:
-                continue
-            seen_links.add(profile_url)
-            
+        for profile_url in unique_urls:
             try:
                 full_url = "https://www.onlinejobs.ph" + profile_url if not profile_url.startswith("http") else profile_url
-                
-                # Open a new tab for deep scraping
                 candidate_page = browser_context.new_page()
                 candidate_page.goto(full_url, wait_until="domcontentloaded", timeout=60000)
                 time.sleep(2)
 
-                # --- PRECISION EXTRACTION USING YOUR PROVIDED SELECTORS ---
-                
+                # --- PRECISION EXTRACTION ---
                 # 1. Job Type
-                job_type = "N/A"
-                sel_job_type = "body > div > section.bg-primary.section-perks.pt-4.position-relative > div > div > div > h1"
-                if candidate_page.locator(sel_job_type).count() > 0:
-                    job_type = candidate_page.locator(sel_job_type).inner_text().strip()
+                jt_sel = "body > div > section.bg-primary.section-perks.pt-4.position-relative > div > div > div > h1"
+                job_type = candidate_page.locator(jt_sel).inner_text().strip() if candidate_page.locator(jt_sel).count() > 0 else "N/A"
 
-                # 2. Employment Type / Investment (Full-time/Part-time)
-                employment_type = "N/A"
-                sel_emp = "body > div > section.bg-ltblue.pt-4.pt-lg-0 > div > div.card.job-post.shadow.mb-4.mb-md-0 > div > div > div:nth-child(1) > dl > dd > p"
-                if candidate_page.locator(sel_emp).count() > 0:
-                    employment_type = candidate_page.locator(sel_emp).inner_text().strip()
+                # 2. Employment Type (Investment)
+                emp_sel = "body > div > section.bg-ltblue.pt-4.pt-lg-0 > div > div.card.job-post.shadow.mb-4.mb-md-0 > div > div > div:nth-child(1) > dl > dd > p"
+                emp_type = candidate_page.locator(emp_sel).inner_text().strip() if candidate_page.locator(emp_sel).count() > 0 else "N/A"
 
                 # 3. Salary
-                salary = "N/A"
-                sel_salary = "body > div > section.bg-ltblue.pt-4.pt-lg-0 > div > div.card.job-post.shadow.mb-4.mb-md-0 > div > div > div:nth-child(2) > dl > dd > p"
-                if candidate_page.locator(sel_salary).count() > 0:
-                    salary = candidate_page.locator(sel_salary).inner_text().strip()
+                sal_sel = "body > div > section.bg-ltblue.pt-4.pt-lg-0 > div > div.card.job-post.shadow.mb-4.mb-md-0 > div > div > div:nth-child(2) > dl > dd > p"
+                salary = candidate_page.locator(sal_sel).inner_text().strip() if candidate_page.locator(sal_sel).count() > 0 else "N/A"
 
                 # 4. Hours per Week
-                hours_per_week = "N/A"
-                sel_hours = "body > div > section.bg-ltblue.pt-4.pt-lg-0 > div > div.card.job-post.shadow.mb-4.mb-md-0 > div > div > div:nth-child(3) > dl > dd > p"
-                if candidate_page.locator(sel_hours).count() > 0:
-                    hours_per_week = candidate_page.locator(sel_hours).inner_text().strip()
+                hrs_sel = "body > div > section.bg-ltblue.pt-4.pt-lg-0 > div > div.card.job-post.shadow.mb-4.mb-md-0 > div > div > div:nth-child(3) > dl > dd > p"
+                hours = candidate_page.locator(hrs_sel).inner_text().strip() if candidate_page.locator(hrs_sel).count() > 0 else "N/A"
 
                 # 5. Last Updated
-                last_updated = "N/A"
-                sel_updated = "body > div > section.bg-ltblue.pt-4.pt-lg-0 > div > div.card.job-post.shadow.mb-4.mb-md-0 > div > div > div:nth-child(4) > dl > dd > p"
-                if candidate_page.locator(sel_updated).count() > 0:
-                    last_updated = candidate_page.locator(sel_updated).inner_text().strip()
+                upd_sel = "body > div > section.bg-ltblue.pt-4.pt-lg-0 > div > div.card.job-post.shadow.mb-4.mb-md-0 > div > div > div:nth-child(4) > dl > dd > p"
+                date_val = candidate_page.locator(upd_sel).inner_text().strip() if candidate_page.locator(upd_sel).count() > 0 else "N/A"
 
-                # 6. Job Overview (Using the ID you provided)
-                job_overview = "N/A"
-                if candidate_page.locator('//*[@id="job-description"]').count() > 0:
-                    job_overview = candidate_page.locator('//*[@id="job-description"]').inner_text().strip()
+                # 6. Job Overview
+                overview_sel = '//*[@id="job-description"]'
+                overview = candidate_page.locator(overview_sel).inner_text().strip() if candidate_page.locator(overview_sel).count() > 0 else "N/A"
 
-                # --- ATTEMPT EMAIL EXTRACTION ---
-                email = "Check Permissions"
+                # --- EMAIL EXTRACTION ---
+                email = "Not Found"
                 show_btn = candidate_page.get_by_text("Show Contact Information", exact=False)
                 if show_btn.is_visible():
                     try:
-                        show_btn.click()
-                        candidate_page.wait_for_timeout(1500)
+                        show_btn.scroll_into_view_if_needed()
+                        show_btn.click(force=True)
+                        candidate_page.wait_for_timeout(4500) 
                         mail_link = candidate_page.locator('a[href^="mailto:"]').first
                         if mail_link.count() > 0:
                             email = mail_link.inner_text().strip()
-                    except:
-                        pass
+                        else:
+                            email_box = candidate_page.locator(':text("@")').first
+                            if email_box.count() > 0:
+                                email = email_box.inner_text().strip()
+                    except Exception:
+                        email = "Click Failed"
 
-                print(f"[{len(results)+1}] Scraped: {job_type} | {salary}")
+                print(f"[{len(results)+1}] Scraped: {job_type} | Updated: {date_val}")
 
                 results.append({
                     "Job Type": job_type,
-                    "Salary": salary,
                     "Email": email,
-                    "Employment Type": employment_type,
-                    "Hours/Week": hours_per_week,
-                    "Last Updated": last_updated,
-                    "Job Overview": job_overview[:200] + "...", # Limiting text for Excel cell size
+                    "Salary": salary,
+                    "Employment Type": emp_type,
+                    "Hours/Week": hours,
+                    "Last Updated": date_val,
+                    "Job Overview": overview[:800],
                     "Link": full_url
                 })
                 
                 candidate_page.close() 
-                
-                # Scraping limit
-                if len(results) >= 30: 
+                if len(results) >= 6:
                     break 
 
             except Exception as e:
-                print(f"Error scraping profile: {e}")
+                print(f"Error on profile: {e}")
                 continue
 
         # --- PHASE 3: EXPORT ---
         if results:
             df = pd.DataFrame(results)
-            filename = f"OJ_Precision_Report_{time.strftime('%Y%m%d_%H%M')}.xlsx"
+            filename = f"OJ_Final_Precision_Report_{time.strftime('%Y%m%d_%H%M')}.xlsx"
             df.to_excel(filename, index=False)
             print(f"\n--- SUCCESS! Created {filename} ---")
         
