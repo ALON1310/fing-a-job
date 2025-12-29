@@ -1,0 +1,11 @@
+# Credentials
+.env
+user_data/
+
+# Python environment
+venv/
+__pycache__/
+*.py[cod]
+
+# Output files
+*.xlsx
