@@ -4,36 +4,36 @@ import pandas as pd
 import time
 import redis
 import logging
-import colorlog  # Added: Library for colored logs
+import colorlog
 from google import genai 
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 
 # --- 1. COLORED LOGGING CONFIGURATION ---
-# Creating a custom colored formatter
 formatter = colorlog.ColoredFormatter(
     "%(log_color)s%(asctime)s - %(levelname)s - %(message)s",
     datefmt='%Y-%m-%d %H:%M:%S',
     log_colors={
         'DEBUG':    'cyan',
-        'INFO':     'white',
+        'INFO':     'green',
         'WARNING':  'yellow',
         'ERROR':    'red',
         'CRITICAL': 'red,bg_white',
     }
 )
 
-# Stream Handler (for the Terminal with colors)
 stream_handler = colorlog.StreamHandler()
 stream_handler.setFormatter(formatter)
 
-# File Handler (for the .log file - no colors allowed in text files)
 file_handler = logging.FileHandler("scraper.log")
 file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 
-# Applying configuration to the logger
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+if logger.hasHandlers():
+    logger.handlers.clear()
+
 logger.addHandler(stream_handler)
 logger.addHandler(file_handler)
 
@@ -119,7 +119,6 @@ def run_job_seeker_agent():
             full_url = "https://www.onlinejobs.ph" + profile_url
 
             if r and r.exists(full_url):
-                # Using yellow for skipped items to make them stand out
                 logging.warning(f"Skipping cached lead: {full_url}")
                 continue
 
@@ -128,23 +127,34 @@ def run_job_seeker_agent():
                 candidate_page.goto(full_url, wait_until="domcontentloaded", timeout=60000)
                 time.sleep(2)
 
+                # --- DATA EXTRACTION ---
+                
+                # Job Title
                 title_sel = "h1"
                 job_title = candidate_page.locator(title_sel).first.inner_text().strip() if candidate_page.locator(title_sel).count() > 0 else "N/A"
                 
+                # Salary (New Addition)
+                sal_sel = "body > div > section.bg-ltblue.pt-4.pt-lg-0 > div > div.card.job-post.shadow.mb-4.mb-md-0 > div > div > div:nth-child(2) > dl > dd > p"
+                salary = candidate_page.locator(sal_sel).inner_text().strip() if candidate_page.locator(sal_sel).count() > 0 else "N/A"
+
+                # Post Date
                 date_sel = "body > div > section.bg-ltblue.pt-4.pt-lg-0 > div > div.card.job-post.shadow.mb-4.mb-md-0 > div > div > div:nth-child(4) > dl > dd > p"
                 post_date = candidate_page.locator(date_sel).inner_text().strip() if candidate_page.locator(date_sel).count() > 0 else "N/A"
 
+                # Job Overview
                 overview_sel = '//*[@id="job-description"]'
                 overview = candidate_page.locator(overview_sel).inner_text().strip() if candidate_page.locator(overview_sel).count() > 0 else "N/A"
 
                 if overview != "N/A":
-                    logging.info(f"Successfully accessed overview for: {job_title}")
+                    logging.info(f"Processing: {job_title} | Salary: {salary}")
 
-                logging.info(f"[{len(results)+1}] AI Analyzing: {job_title}")
+                # AI Process
+                logging.info(f"[{len(results)+1}] AI Analyzing contact info...")
                 contact_info = extract_contact_with_ai(overview)
 
                 results.append({
                     "Job Title": job_title,
+                    "Salary": salary,      # Added to Excel
                     "Post Date": post_date,
                     "AI Refined Contact": contact_info,
                     "Link": full_url
@@ -155,7 +165,7 @@ def run_job_seeker_agent():
 
                 candidate_page.close() 
                 
-                if len(results) >= 6:
+                if len(results) >= 10: # Updated to 10 for better sample
                     break 
 
             except Exception as e:
@@ -164,9 +174,9 @@ def run_job_seeker_agent():
 
         if results:
             df = pd.DataFrame(results)
-            filename = f"OJ_Final_AI_Report_{time.strftime('%Y%m%d_%H%M')}.xlsx"
+            filename = f"OJ_AI_Scraper_Report_{time.strftime('%Y%m%d_%H%M')}.xlsx"
             df.to_excel(filename, index=False)
-            logging.info(f"Final Report created: {filename}")
+            logging.info(f"Final Report created successfully: {filename}")
         
         browser_context.close()
 

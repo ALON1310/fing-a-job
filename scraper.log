@@ -1,0 +1,85 @@
+2025-12-30 12:54:47,127 - INFO - AI Client configured successfully.
+2025-12-30 12:54:47,135 - INFO - Redis connection successful.
+2025-12-30 12:54:48,473 - INFO - PHASE 1: AUTHENTICATION
+2025-12-30 12:54:52,691 - INFO - Navigating to job search results...
+2025-12-30 12:54:58,124 - INFO - Analyzing 30 leads...
+2025-12-30 12:55:01,133 - INFO - Successfully accessed overview for: TikTok Slideshow Creator $500/m (No Experience Needed!)
+2025-12-30 12:55:01,133 - INFO - [1] AI Analyzing: TikTok Slideshow Creator $500/m (No Experience Needed!)
+2025-12-30 12:55:01,133 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 12:55:03,664 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-30 12:55:06,116 - INFO - Successfully accessed overview for: Email Inbox Manager – Cold Email (Full-Time, US Hours)
+2025-12-30 12:55:06,116 - INFO - [2] AI Analyzing: Email Inbox Manager – Cold Email (Full-Time, US Hours)
+2025-12-30 12:55:06,116 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 12:55:10,623 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-30 12:55:13,514 - INFO - Successfully accessed overview for: ???? Creative Editor (Video, Ads & AI) – Supplement Brand (Full-Time, Remote)
+2025-12-30 12:55:13,514 - INFO - [3] AI Analyzing: ???? Creative Editor (Video, Ads & AI) – Supplement Brand (Full-Time, Remote)
+2025-12-30 12:55:13,514 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 12:55:15,370 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-30 12:55:17,790 - INFO - Successfully accessed overview for: AI Video Creator (Expert Level) – Fast-Scaling Pet Brand
+2025-12-30 12:55:17,790 - INFO - [4] AI Analyzing: AI Video Creator (Expert Level) – Fast-Scaling Pet Brand
+2025-12-30 12:55:17,791 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 12:55:18,898 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-30 12:55:21,331 - INFO - Successfully accessed overview for: Full-Stack SEO Specialist
+2025-12-30 12:55:21,331 - INFO - [5] AI Analyzing: Full-Stack SEO Specialist
+2025-12-30 12:55:21,331 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 12:55:23,409 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-30 12:55:25,844 - INFO - Successfully accessed overview for: Virtual Registered Nurses (RN) and Medical Professionals
+2025-12-30 12:55:25,845 - INFO - [6] AI Analyzing: Virtual Registered Nurses (RN) and Medical Professionals
+2025-12-30 12:55:25,845 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 12:55:28,230 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-30 12:55:28,333 - INFO - Final Report created: OJ_Final_AI_Report_20251230_1255.xlsx
+2025-12-30 13:02:04,327 - INFO - AI Client configured successfully.
+2025-12-30 13:02:04,332 - INFO - Redis connection successful.
+2025-12-30 13:02:05,621 - INFO - PHASE 1: AUTHENTICATION
+2025-12-30 13:02:10,520 - INFO - Navigating to job search results...
+2025-12-30 13:02:14,810 - INFO - Analyzing 30 leads...
+2025-12-30 13:02:17,275 - INFO - Processing: Senior Media Campaign Manager | Salary: TBD
+2025-12-30 13:02:17,275 - INFO - [1] AI Analyzing contact info...
+2025-12-30 13:02:17,275 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:02:19,163 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-30 13:02:21,578 - INFO - Processing: Appointment Setter | Salary: 700-1200
+2025-12-30 13:02:21,579 - INFO - [2] AI Analyzing contact info...
+2025-12-30 13:02:21,579 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:02:23,255 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-30 13:02:25,671 - INFO - Processing: CAD Engineer, sketchup to injection molding design | Salary: 500
+2025-12-30 13:02:25,671 - INFO - [3] AI Analyzing contact info...
+2025-12-30 13:02:25,671 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:02:27,760 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-30 13:02:30,182 - INFO - Processing: Amazon SEO Copywriter | Salary: $600
+2025-12-30 13:02:30,182 - INFO - [4] AI Analyzing contact info...
+2025-12-30 13:02:30,182 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:02:31,140 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-30 13:02:31,162 - WARNING - Skipping cached lead: https://www.onlinejobs.ph/jobseekers/job/TikTok-Slideshow-Creator-500m-No-Experience-Needed-1543272
+2025-12-30 13:02:31,163 - WARNING - Skipping cached lead: https://www.onlinejobs.ph/jobseekers/job/Creative-Editor-Video-Ads-AI-Supplement-Brand-Full-Time-Remote-1543270
+2025-12-30 13:02:31,164 - WARNING - Skipping cached lead: https://www.onlinejobs.ph/jobseekers/job/AI-Video-Creator-Expert-Level-Fast-Scaling-Pet-Brand-1543269
+2025-12-30 13:02:31,165 - WARNING - Skipping cached lead: https://www.onlinejobs.ph/jobseekers/job/Full-Stack-SEO-Specialist-1543268
+2025-12-30 13:02:31,166 - WARNING - Skipping cached lead: https://www.onlinejobs.ph/jobseekers/job/Virtual-Registered-Nurses-RN-and-Medical-Professionals-1543266
+2025-12-30 13:02:33,569 - INFO - Processing: Head of SEO & Google Ads | Salary: ?70000 - ?80000
+2025-12-30 13:02:33,569 - INFO - [5] AI Analyzing contact info...
+2025-12-30 13:02:33,569 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:02:34,928 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-30 13:02:37,352 - INFO - Processing: Graphic Designer / Klaviyo Implementer For Email Marketing Agency | Salary: 700
+2025-12-30 13:02:37,352 - INFO - [6] AI Analyzing contact info...
+2025-12-30 13:02:37,352 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:02:39,744 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-30 13:02:42,196 - INFO - Processing: Video Editor for TikTok Reels (Story + Color Focus) | Salary: 650
+2025-12-30 13:02:42,197 - INFO - [7] AI Analyzing contact info...
+2025-12-30 13:02:42,197 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:02:42,297 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2025-12-30 13:02:42,298 - ERROR - AI API Error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 5, model: gemini-2.5-flash\nPlease retry in 17.653272186s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-flash'}, 'quotaValue': '5'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '17s'}]}}
+2025-12-30 13:02:44,705 - INFO - Processing: Marketing VA + GoHighLevel Specialist | $700-$900/month | Salary: $700-$900
+2025-12-30 13:02:44,706 - INFO - [8] AI Analyzing contact info...
+2025-12-30 13:02:44,706 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:02:44,811 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2025-12-30 13:02:44,812 - ERROR - AI API Error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 5, model: gemini-2.5-flash\nPlease retry in 15.13961039s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-flash'}, 'quotaValue': '5'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '15s'}]}}
+2025-12-30 13:02:47,217 - INFO - Processing: Head of Google Ads Department | Salary: ?70000 - ?80000
+2025-12-30 13:02:47,217 - INFO - [9] AI Analyzing contact info...
+2025-12-30 13:02:47,217 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:02:47,324 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2025-12-30 13:02:47,324 - ERROR - AI API Error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 5, model: gemini-2.5-flash\nPlease retry in 12.629582688s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-flash'}, 'quotaValue': '5'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '12s'}]}}
+2025-12-30 13:02:49,767 - INFO - Processing: Head of SEO Department | Salary: ?70000 - ?80000
+2025-12-30 13:02:49,767 - INFO - [10] AI Analyzing contact info...
+2025-12-30 13:02:49,767 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:02:49,870 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2025-12-30 13:02:49,870 - ERROR - AI API Error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 5, model: gemini-2.5-flash\nPlease retry in 10.079981233s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-flash'}, 'quotaValue': '5'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '10s'}]}}
+2025-12-30 13:02:49,963 - INFO - Final Report created successfully: OJ_AI_Scraper_Report_20251230_1302.xlsx
