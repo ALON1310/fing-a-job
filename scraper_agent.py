@@ -61,10 +61,10 @@ def extract_contact_with_ai(overview_text):
     if not overview_text or overview_text == "N/A" or len(overview_text) < 15:
         return "None"
     
-    # --- SMART SLEEP TO AVOID 429 ERROR ---
-    # Since your log shows a limit of 5 requests/min, we wait 12-15 seconds
-    logging.info("Waiting 12 seconds to respect Google API Rate Limits...")
-    time.sleep(12) 
+    # --- UPDATED: LONGER SLEEP TO AVOID 429 ERROR ---
+    # Increased to 20 seconds to stay well under the 5 requests/min limit
+    logging.info("Waiting 20 seconds to respect Google API Rate Limits...")
+    time.sleep(20) 
 
     prompt = f"""
     Extract only contact details (Email, Phone, WhatsApp, LinkedIn) from this text.
@@ -83,9 +83,8 @@ def extract_contact_with_ai(overview_text):
             return response.text.strip()
         return "None"
     except Exception as e:
-        # If we still hit a rate limit, the error will be caught here
         if "429" in str(e):
-            logging.error("Rate limit hit again! AI will return 'None' for this lead.")
+            logging.error("Rate limit hit! Google is blocking requests. Try increasing sleep or switching to Paid tier.")
         else:
             logging.error(f"AI API Error: {e}")
         return "None"
@@ -137,20 +136,15 @@ def run_job_seeker_agent():
                 time.sleep(2)
 
                 # --- DATA EXTRACTION ---
-                
-                # Job Title
                 title_sel = "h1"
                 job_title = candidate_page.locator(title_sel).first.inner_text().strip() if candidate_page.locator(title_sel).count() > 0 else "N/A"
                 
-                # Salary (New Addition)
                 sal_sel = "body > div > section.bg-ltblue.pt-4.pt-lg-0 > div > div.card.job-post.shadow.mb-4.mb-md-0 > div > div > div:nth-child(2) > dl > dd > p"
                 salary = candidate_page.locator(sal_sel).inner_text().strip() if candidate_page.locator(sal_sel).count() > 0 else "N/A"
 
-                # Post Date
                 date_sel = "body > div > section.bg-ltblue.pt-4.pt-lg-0 > div > div.card.job-post.shadow.mb-4.mb-md-0 > div > div > div:nth-child(4) > dl > dd > p"
                 post_date = candidate_page.locator(date_sel).inner_text().strip() if candidate_page.locator(date_sel).count() > 0 else "N/A"
 
-                # Job Overview
                 overview_sel = '//*[@id="job-description"]'
                 overview = candidate_page.locator(overview_sel).inner_text().strip() if candidate_page.locator(overview_sel).count() > 0 else "N/A"
 
@@ -161,9 +155,8 @@ def run_job_seeker_agent():
                 logging.info(f"[{len(results)+1}] AI Analyzing contact info...")
                 contact_info = extract_contact_with_ai(overview)
 
-                # ONLY save to Redis if AI process didn't fail completely
-                # This way, if you hit a rate limit, you can run again and it will retry the missed ones
-                if contact_info != "None":
+                # logic change: only cache and record if AI succeeded
+                if contact_info and contact_info != "None":
                     results.append({
                         "Job Title": job_title,
                         "Salary": salary,
@@ -171,17 +164,16 @@ def run_job_seeker_agent():
                         "AI Refined Contact": contact_info,
                         "Link": full_url
                     })
+                    
                     if r:
                         r.set(full_url, "processed")
+                        logging.info(f"Successfully cached: {job_title}")
                 else:
-                    logging.warning(f"AI failed to extract info for {job_title}. Will not cache, so we can retry later.")
-                
-                if r:
-                    r.set(full_url, "processed")
+                    logging.warning(f"AI returned 'None' for {job_title}. Lead will not be cached to allow for a retry later.")
 
-                candidate_page.close() 
+                candidate_page.close() # Closed once here correctly
                 
-                if len(results) >= 10: # Updated to 10 for better sample
+                if len(results) >= 10:
                     break 
 
             except Exception as e:
@@ -190,7 +182,7 @@ def run_job_seeker_agent():
 
         if results:
             df = pd.DataFrame(results)
-            filename = f"OJ_AI_Scraper_Report_{time.strftime('%Y%m%d_%H%M')}.xlsx"
+            filename = f"OJ_Final_AI_Report_{time.strftime('%Y%m%d_%H%M')}.xlsx"
             df.to_excel(filename, index=False)
             logging.info(f"Final Report created successfully: {filename}")
         

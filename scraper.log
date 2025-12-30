@@ -83,3 +83,141 @@
 2025-12-30 13:02:49,870 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
 2025-12-30 13:02:49,870 - ERROR - AI API Error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 5, model: gemini-2.5-flash\nPlease retry in 10.079981233s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-flash'}, 'quotaValue': '5'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '10s'}]}}
 2025-12-30 13:02:49,963 - INFO - Final Report created successfully: OJ_AI_Scraper_Report_20251230_1302.xlsx
+2025-12-30 13:16:10,701 - INFO - AI Client configured successfully.
+2025-12-30 13:16:10,705 - INFO - Redis connection successful.
+2025-12-30 13:16:11,514 - INFO - PHASE 1: AUTHENTICATION
+2025-12-30 13:16:14,812 - INFO - Navigating to job search results...
+2025-12-30 13:16:20,085 - INFO - Analyzing 30 leads...
+2025-12-30 13:16:23,193 - INFO - Processing: PHP Developer | Salary: 820
+2025-12-30 13:16:23,193 - INFO - [1] AI Analyzing contact info...
+2025-12-30 13:16:23,193 - INFO - Waiting 12 seconds to respect Google API Rate Limits...
+2025-12-30 13:16:35,198 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:16:36,685 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-30 13:16:39,569 - INFO - Processing: DTC Video Editor for Meta Ads – Create Intentional, High-Converting UGC Ads | Salary: 500
+2025-12-30 13:16:39,569 - INFO - [2] AI Analyzing contact info...
+2025-12-30 13:16:39,569 - INFO - Waiting 12 seconds to respect Google API Rate Limits...
+2025-12-30 13:16:51,571 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:16:55,013 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-30 13:16:55,044 - WARNING - Skipping cached lead: https://www.onlinejobs.ph/jobseekers/job/Senior-Media-Campaign-Manager-1543276
+2025-12-30 13:16:55,045 - WARNING - Skipping cached lead: https://www.onlinejobs.ph/jobseekers/job/CAD-Engineer-sketchup-to-injection-molding-design-1543274
+2025-12-30 13:16:55,045 - WARNING - Skipping cached lead: https://www.onlinejobs.ph/jobseekers/job/Amazon-SEO-Copywriter-1543273
+2025-12-30 13:16:55,046 - WARNING - Skipping cached lead: https://www.onlinejobs.ph/jobseekers/job/Creative-Editor-Video-Ads-AI-Supplement-Brand-Full-Time-Remote-1543270
+2025-12-30 13:16:55,046 - WARNING - Skipping cached lead: https://www.onlinejobs.ph/jobseekers/job/AI-Video-Creator-Expert-Level-Fast-Scaling-Pet-Brand-1543269
+2025-12-30 13:16:55,046 - WARNING - Skipping cached lead: https://www.onlinejobs.ph/jobseekers/job/Full-Stack-SEO-Specialist-1543268
+2025-12-30 13:16:55,047 - WARNING - Skipping cached lead: https://www.onlinejobs.ph/jobseekers/job/Virtual-Registered-Nurses-RN-and-Medical-Professionals-1543266
+2025-12-30 13:16:55,047 - WARNING - Skipping cached lead: https://www.onlinejobs.ph/jobseekers/job/Head-of-SEO-Google-Ads-1543265
+2025-12-30 13:16:55,047 - WARNING - Skipping cached lead: https://www.onlinejobs.ph/jobseekers/job/Graphic-Designer-Klaviyo-Implementer-For-Email-Marketing-Agency-1543264
+2025-12-30 13:16:55,048 - WARNING - Skipping cached lead: https://www.onlinejobs.ph/jobseekers/job/Marketing-VA-GoHighLevel-Specialist-700-900month-1543260
+2025-12-30 13:16:55,048 - WARNING - Skipping cached lead: https://www.onlinejobs.ph/jobseekers/job/Head-of-Google-Ads-Department-1543259
+2025-12-30 13:16:55,049 - WARNING - Skipping cached lead: https://www.onlinejobs.ph/jobseekers/job/Head-of-SEO-Department-1543256
+2025-12-30 13:16:58,124 - INFO - Processing: Amazon Inventory Management Expert (Supply Chain) - Expert wanted | Salary: % higher than last drawn
+2025-12-30 13:16:58,124 - INFO - [3] AI Analyzing contact info...
+2025-12-30 13:16:58,124 - INFO - Waiting 12 seconds to respect Google API Rate Limits...
+2025-12-30 13:17:10,126 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:17:13,036 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-30 13:17:16,075 - INFO - Processing: Copywriter / Amazon SEO Specialist / Affiliate Outreach – We’re Hiring! | Salary: % higher than last drawn
+2025-12-30 13:17:16,075 - INFO - [4] AI Analyzing contact info...
+2025-12-30 13:17:16,076 - INFO - Waiting 12 seconds to respect Google API Rate Limits...
+2025-12-30 13:17:28,081 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:17:28,268 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2025-12-30 13:17:28,270 - ERROR - Rate limit hit again! AI will return 'None' for this lead.
+2025-12-30 13:17:28,270 - WARNING - AI failed to extract info for Copywriter / Amazon SEO Specialist / Affiliate Outreach – We’re Hiring!. Will not cache, so we can retry later.
+2025-12-30 13:17:31,249 - INFO - Processing: Patient Engagement(Clinical Background Preferred – PharmD / Mental Health / Behavioral Health) | Salary: $8.00-$9.00
+2025-12-30 13:17:31,249 - INFO - [4] AI Analyzing contact info...
+2025-12-30 13:17:31,249 - INFO - Waiting 12 seconds to respect Google API Rate Limits...
+2025-12-30 13:17:43,253 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:17:43,441 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2025-12-30 13:17:43,442 - ERROR - Rate limit hit again! AI will return 'None' for this lead.
+2025-12-30 13:17:43,442 - WARNING - AI failed to extract info for Patient Engagement(Clinical Background Preferred – PharmD / Mental Health / Behavioral Health). Will not cache, so we can retry later.
+2025-12-30 13:17:46,438 - INFO - Processing: Enrollment Specialist - US-Based [Full-Cycle Sales] | Salary: $1,100 USD Monthly
+2025-12-30 13:17:46,438 - INFO - [4] AI Analyzing contact info...
+2025-12-30 13:17:46,438 - INFO - Waiting 12 seconds to respect Google API Rate Limits...
+2025-12-30 13:17:58,441 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:17:58,621 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2025-12-30 13:17:58,622 - ERROR - Rate limit hit again! AI will return 'None' for this lead.
+2025-12-30 13:17:58,622 - WARNING - AI failed to extract info for Enrollment Specialist - US-Based [Full-Cycle Sales]. Will not cache, so we can retry later.
+2025-12-30 13:18:01,653 - INFO - Processing: Media Specialist - Google & Facebook | Salary: $10000-15000
+2025-12-30 13:18:01,653 - INFO - [4] AI Analyzing contact info...
+2025-12-30 13:18:01,653 - INFO - Waiting 12 seconds to respect Google API Rate Limits...
+2025-12-30 13:18:13,656 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:18:13,835 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2025-12-30 13:18:13,836 - ERROR - Rate limit hit again! AI will return 'None' for this lead.
+2025-12-30 13:18:13,836 - WARNING - AI failed to extract info for Media Specialist - Google & Facebook. Will not cache, so we can retry later.
+2025-12-30 13:18:16,814 - INFO - Processing: Junior Affiliate Manager | Salary: Negotiable
+2025-12-30 13:18:16,814 - INFO - [4] AI Analyzing contact info...
+2025-12-30 13:18:16,814 - INFO - Waiting 12 seconds to respect Google API Rate Limits...
+2025-12-30 13:18:28,816 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:18:28,994 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2025-12-30 13:18:28,996 - ERROR - Rate limit hit again! AI will return 'None' for this lead.
+2025-12-30 13:18:28,996 - WARNING - AI failed to extract info for Junior Affiliate Manager. Will not cache, so we can retry later.
+2025-12-30 13:18:32,020 - INFO - Processing: Junior Affiliate Manager | Salary: Negotiable
+2025-12-30 13:18:32,020 - INFO - [4] AI Analyzing contact info...
+2025-12-30 13:18:32,020 - INFO - Waiting 12 seconds to respect Google API Rate Limits...
+2025-12-30 13:18:44,025 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:18:44,205 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2025-12-30 13:18:44,205 - ERROR - Rate limit hit again! AI will return 'None' for this lead.
+2025-12-30 13:18:44,206 - WARNING - AI failed to extract info for Junior Affiliate Manager. Will not cache, so we can retry later.
+2025-12-30 13:18:47,211 - INFO - Processing: Experienced QuickBooks Bookkeeper Virtual Assistant – Amazon Expertise (Day/Night Shifts) | Salary: Up to 150,000 php or depends on your ...
+2025-12-30 13:18:47,212 - INFO - [4] AI Analyzing contact info...
+2025-12-30 13:18:47,212 - INFO - Waiting 12 seconds to respect Google API Rate Limits...
+2025-12-30 13:18:59,217 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:18:59,413 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2025-12-30 13:18:59,414 - ERROR - Rate limit hit again! AI will return 'None' for this lead.
+2025-12-30 13:18:59,414 - WARNING - AI failed to extract info for Experienced QuickBooks Bookkeeper Virtual Assistant – Amazon Expertise (Day/Night Shifts). Will not cache, so we can retry later.
+2025-12-30 13:19:02,807 - INFO - Processing: Experienced Executive Virtual Assistant – Recruiting & Lead Generation (Day/Night Shifts) | Salary: Up to 150,000 php or depends on your ...
+2025-12-30 13:19:02,807 - INFO - [4] AI Analyzing contact info...
+2025-12-30 13:19:02,807 - INFO - Waiting 12 seconds to respect Google API Rate Limits...
+2025-12-30 13:19:14,811 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:19:15,029 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2025-12-30 13:19:15,030 - ERROR - Rate limit hit again! AI will return 'None' for this lead.
+2025-12-30 13:19:15,030 - WARNING - AI failed to extract info for Experienced Executive Virtual Assistant – Recruiting & Lead Generation (Day/Night Shifts). Will not cache, so we can retry later.
+2025-12-30 13:19:17,900 - INFO - Processing: Experienced QuickBooks Bookkeeper Virtual Assistant – Amazon Expertise (Day/Night Shifts) | Salary: Up to 150,000 php or depends on your ...
+2025-12-30 13:19:17,900 - INFO - [4] AI Analyzing contact info...
+2025-12-30 13:19:17,900 - INFO - Waiting 12 seconds to respect Google API Rate Limits...
+2025-12-30 13:19:29,905 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:19:30,133 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2025-12-30 13:19:30,135 - ERROR - Rate limit hit again! AI will return 'None' for this lead.
+2025-12-30 13:19:30,135 - WARNING - AI failed to extract info for Experienced QuickBooks Bookkeeper Virtual Assistant – Amazon Expertise (Day/Night Shifts). Will not cache, so we can retry later.
+2025-12-30 13:19:33,217 - INFO - Processing: Seeking Premiere Pro Experienced Video Editor (FULL TIME POTENTIAL) | Salary: $1,370 to $2,190/month ($7 to $12/h)
+2025-12-30 13:19:33,217 - INFO - [4] AI Analyzing contact info...
+2025-12-30 13:19:33,217 - INFO - Waiting 12 seconds to respect Google API Rate Limits...
+2025-12-30 13:19:45,222 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:19:45,443 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2025-12-30 13:19:45,445 - ERROR - Rate limit hit again! AI will return 'None' for this lead.
+2025-12-30 13:19:45,445 - WARNING - AI failed to extract info for Seeking Premiere Pro Experienced Video Editor (FULL TIME POTENTIAL). Will not cache, so we can retry later.
+2025-12-30 13:19:49,018 - INFO - Processing: Content Developer (eLearning Developer) | Salary: N/A
+2025-12-30 13:19:49,018 - INFO - [4] AI Analyzing contact info...
+2025-12-30 13:19:49,018 - INFO - Waiting 12 seconds to respect Google API Rate Limits...
+2025-12-30 13:20:01,022 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:20:01,229 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2025-12-30 13:20:01,230 - ERROR - Rate limit hit again! AI will return 'None' for this lead.
+2025-12-30 13:20:01,230 - WARNING - AI failed to extract info for Content Developer (eLearning Developer). Will not cache, so we can retry later.
+2025-12-30 13:20:04,162 - INFO - Processing: Instructional Designer (e-learning) | Salary: TBD
+2025-12-30 13:20:04,162 - INFO - [4] AI Analyzing contact info...
+2025-12-30 13:20:04,162 - INFO - Waiting 12 seconds to respect Google API Rate Limits...
+2025-12-30 13:20:16,163 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:20:16,385 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2025-12-30 13:20:16,386 - ERROR - Rate limit hit again! AI will return 'None' for this lead.
+2025-12-30 13:20:16,386 - WARNING - AI failed to extract info for Instructional Designer (e-learning). Will not cache, so we can retry later.
+2025-12-30 13:20:20,412 - INFO - Processing: French Translator | Salary: TBD
+2025-12-30 13:20:20,413 - INFO - [4] AI Analyzing contact info...
+2025-12-30 13:20:20,413 - INFO - Waiting 12 seconds to respect Google API Rate Limits...
+2025-12-30 13:20:32,415 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:20:32,617 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2025-12-30 13:20:32,618 - ERROR - Rate limit hit again! AI will return 'None' for this lead.
+2025-12-30 13:20:32,618 - WARNING - AI failed to extract info for French Translator. Will not cache, so we can retry later.
+2025-12-30 13:20:35,482 - INFO - Processing: Influencer Partnership Developer | Salary: 18000php plus commission
+2025-12-30 13:20:35,482 - INFO - [4] AI Analyzing contact info...
+2025-12-30 13:20:35,482 - INFO - Waiting 12 seconds to respect Google API Rate Limits...
+2025-12-30 13:20:47,483 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:20:47,726 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2025-12-30 13:20:47,728 - ERROR - Rate limit hit again! AI will return 'None' for this lead.
+2025-12-30 13:20:47,728 - WARNING - AI failed to extract info for Influencer Partnership Developer. Will not cache, so we can retry later.
+2025-12-30 13:20:50,720 - INFO - Processing: Performance Video Editor (DTC/VSL Specialist) | Salary: $800 a month
+2025-12-30 13:20:50,720 - INFO - [4] AI Analyzing contact info...
+2025-12-30 13:20:50,720 - INFO - Waiting 12 seconds to respect Google API Rate Limits...
+2025-12-30 13:21:02,721 - INFO - AFC is enabled with max remote calls: 10.
+2025-12-30 13:21:03,232 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2025-12-30 13:21:03,233 - ERROR - Rate limit hit again! AI will return 'None' for this lead.
+2025-12-30 13:21:03,233 - WARNING - AI failed to extract info for Performance Video Editor (DTC/VSL Specialist). Will not cache, so we can retry later.
+2025-12-30 13:21:03,332 - INFO - Final Report created successfully: OJ_AI_Scraper_Report_20251230_1321.xlsx
