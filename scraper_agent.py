@@ -3,21 +3,39 @@ import re
 import pandas as pd
 import time
 import redis
-import logging  # Added: Standard logging library
+import logging
+import colorlog  # Added: Library for colored logs
 from google import genai 
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 
-# --- 1. LOGGING CONFIGURATION ---
-# This sets up logging to both a file and the console.
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler("scraper.log"), # Saves logs to a file
-        logging.StreamHandler()             # Displays logs in the terminal
-    ]
+# --- 1. COLORED LOGGING CONFIGURATION ---
+# Creating a custom colored formatter
+formatter = colorlog.ColoredFormatter(
+    "%(log_color)s%(asctime)s - %(levelname)s - %(message)s",
+    datefmt='%Y-%m-%d %H:%M:%S',
+    log_colors={
+        'DEBUG':    'cyan',
+        'INFO':     'white',
+        'WARNING':  'yellow',
+        'ERROR':    'red',
+        'CRITICAL': 'red,bg_white',
+    }
 )
+
+# Stream Handler (for the Terminal with colors)
+stream_handler = colorlog.StreamHandler()
+stream_handler.setFormatter(formatter)
+
+# File Handler (for the .log file - no colors allowed in text files)
+file_handler = logging.FileHandler("scraper.log")
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+
+# Applying configuration to the logger
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+logger.addHandler(stream_handler)
+logger.addHandler(file_handler)
 
 # --- 2. SETUP AI & SECURITY ---
 load_dotenv()
@@ -101,7 +119,8 @@ def run_job_seeker_agent():
             full_url = "https://www.onlinejobs.ph" + profile_url
 
             if r and r.exists(full_url):
-                logging.info(f"Skipping cached lead: {full_url}")
+                # Using yellow for skipped items to make them stand out
+                logging.warning(f"Skipping cached lead: {full_url}")
                 continue
 
             try:
@@ -109,7 +128,6 @@ def run_job_seeker_agent():
                 candidate_page.goto(full_url, wait_until="domcontentloaded", timeout=60000)
                 time.sleep(2)
 
-                # Extraction
                 title_sel = "h1"
                 job_title = candidate_page.locator(title_sel).first.inner_text().strip() if candidate_page.locator(title_sel).count() > 0 else "N/A"
                 
@@ -122,7 +140,6 @@ def run_job_seeker_agent():
                 if overview != "N/A":
                     logging.info(f"Successfully accessed overview for: {job_title}")
 
-                # AI Process
                 logging.info(f"[{len(results)+1}] AI Analyzing: {job_title}")
                 contact_info = extract_contact_with_ai(overview)
 
