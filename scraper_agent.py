@@ -61,6 +61,11 @@ def extract_contact_with_ai(overview_text):
     if not overview_text or overview_text == "N/A" or len(overview_text) < 15:
         return "None"
     
+    # --- SMART SLEEP TO AVOID 429 ERROR ---
+    # Since your log shows a limit of 5 requests/min, we wait 12-15 seconds
+    logging.info("Waiting 12 seconds to respect Google API Rate Limits...")
+    time.sleep(12) 
+
     prompt = f"""
     Extract only contact details (Email, Phone, WhatsApp, LinkedIn) from this text.
     Format: Type: Value.
@@ -78,7 +83,11 @@ def extract_contact_with_ai(overview_text):
             return response.text.strip()
         return "None"
     except Exception as e:
-        logging.error(f"AI API Error: {e}")
+        # If we still hit a rate limit, the error will be caught here
+        if "429" in str(e):
+            logging.error("Rate limit hit again! AI will return 'None' for this lead.")
+        else:
+            logging.error(f"AI API Error: {e}")
         return "None"
 
 def run_job_seeker_agent():
@@ -148,17 +157,24 @@ def run_job_seeker_agent():
                 if overview != "N/A":
                     logging.info(f"Processing: {job_title} | Salary: {salary}")
 
-                # AI Process
+                # --- AI PROCESS ---
                 logging.info(f"[{len(results)+1}] AI Analyzing contact info...")
                 contact_info = extract_contact_with_ai(overview)
 
-                results.append({
-                    "Job Title": job_title,
-                    "Salary": salary,      # Added to Excel
-                    "Post Date": post_date,
-                    "AI Refined Contact": contact_info,
-                    "Link": full_url
-                })
+                # ONLY save to Redis if AI process didn't fail completely
+                # This way, if you hit a rate limit, you can run again and it will retry the missed ones
+                if contact_info != "None":
+                    results.append({
+                        "Job Title": job_title,
+                        "Salary": salary,
+                        "Post Date": post_date,
+                        "AI Refined Contact": contact_info,
+                        "Link": full_url
+                    })
+                    if r:
+                        r.set(full_url, "processed")
+                else:
+                    logging.warning(f"AI failed to extract info for {job_title}. Will not cache, so we can retry later.")
                 
                 if r:
                     r.set(full_url, "processed")
