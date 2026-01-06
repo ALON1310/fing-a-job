@@ -1,11 +1,18 @@
-# Credentials
+# Security - Secrets & Credentials
 .env
-user_data/
+credentials.json
 
-# Python environment
+# Python Virtual Environment
 venv/
 __pycache__/
-*.py[cod]
+*.pyc
 
-# Output files
+# Bot Data & Session
+user_data/
+
+# Output Files (Excel & Logs)
 *.xlsx
+scraper.log
+
+# System Files
+.DS_Store
