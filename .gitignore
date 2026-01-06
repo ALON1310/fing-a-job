@@ -16,3 +16,7 @@ scraper.log
 
 # System Files
 .DS_Store
+
+# Test & Sandbox Files
+test_scraper.py
+scraper_test.log
