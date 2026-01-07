@@ -20,3 +20,5 @@ scraper.log
 # Test & Sandbox Files
 test_scraper.py
 scraper_test.log
+
+*.log
