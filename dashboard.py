@@ -11,15 +11,11 @@ st.title("☁️ Master Sales CRM (Google Sheets)")
 # --- CONNECTION FUNCTION ---
 def get_gspread_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    
-    # Attempt 1: Local loading
     try:
         creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
         return gspread.authorize(creds)
     except Exception:
         pass
-    
-    # Attempt 2: Cloud loading (Streamlit Secrets)
     try:
         key_dict = {
             "type": st.secrets["gcp_service_account"]["type"],
@@ -44,31 +40,24 @@ def load_data():
     if not client:
         st.error("🚨 Authentication Error.")
         st.stop()
-        
     try:
-        # 1. Load Main Data
         sheet = client.open("Master_Leads_DB").sheet1
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
-
-        # 2. Load Settings (Sales Reps List)
         try:
             settings_sheet = client.open("Master_Leads_DB").worksheet("Settings")
             reps_list = settings_sheet.col_values(1)
             sales_reps_options = [x for x in reps_list if x and x != "Sales Reps"]
         except gspread.WorksheetNotFound:
             sales_reps_options = ["Dor", "Alon", "Unassigned"]
-
         return df, sheet, sales_reps_options
-
     except Exception as e:
         st.error(f"⚠️ Error connecting to Google Sheet: {e}")
         st.stop()
 
 # --- HELPER: PARSE DATE ---
 def parse_date(date_str):
-    if not isinstance(date_str, str):
-        return pd.NaT
+    if not isinstance(date_str, str): return pd.NaT
     try:
         clean = date_str.replace(",", "").strip()
         return pd.to_datetime(clean, format="%b %d %Y", errors='coerce')
@@ -78,79 +67,75 @@ def parse_date(date_str):
 # --- MAIN APP ---
 df, sheet_obj, sales_reps_options = load_data()
 
-# Ensure critical columns exist
 expected_cols = ["Job Title", "Salary", "Post Date", "Contact Info", "Link", "Description", "Status", "Sales Rep", "Notes"]
 for col in expected_cols:
-    if col not in df.columns:
-        df[col] = ""
+    if col not in df.columns: df[col] = ""
 
-# Define Custom Status List
-STATUS_OPTIONS = ["New", "In Progress", "Hot Lead", "Cold Lead", "Move to Trash"]
+# --- DEFINED STATUS LIST (The Professional Way) ---
+STATUS_OPTIONS = ["New", "In Progress", "Hot Lead", "Lost", "Not Relevant"]
 
-# --- SIDEBAR CONTROLS ---
+# --- PRE-PROCESSING ---
+df["_sort_date"] = df["Post Date"].apply(parse_date)
+
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("🔍 Filters & Sorting")
     
-    # 3. DATE SORTING
-    sort_order = st.radio("📅 Date Sort:", ["Newest First", "Oldest First"])
+    st.subheader("Sort Options")
+    sort_cols_selection = st.multiselect(
+        "Sort By:", 
+        options=["Date", "Status", "Sales Rep", "Salary"],
+        default=["Date"]
+    )
+    sort_ascending = st.checkbox("Ascending Order (A-Z)?", value=False)
     
     st.divider()
     
-    # 1. STATUS FILTER
-    # Logic: Default to ALL options so users see everything initially
+    # STATUS FILTER
     status_filter = st.multiselect(
         "Filter Status:", 
         options=STATUS_OPTIONS,
-        default=[] # Start empty to trigger "Show All" logic below, or put STATUS_OPTIONS to select all visually
+        default=[] 
     )
     
-    # 2. SALES REP FILTER
+    # REP FILTER
     existing_reps_in_db = df["Sales Rep"].unique().tolist() if "Sales Rep" in df.columns else []
     all_reps_combined = list(set(sales_reps_options + existing_reps_in_db))
-    
-    rep_filter = st.multiselect(
-        "Filter Sales Rep:", 
-        options=all_reps_combined,
-        default=[] # Start empty
-    )
+    rep_filter = st.multiselect("Filter Sales Rep:", options=all_reps_combined, default=[])
 
 # --- APPLY LOGIC ---
 
-# Smart Filter Logic: If filter is empty, treat it as "Select All"
+# 1. Status Logic: Hide "Lost" and "Not Relevant" unless explicitly selected
 if not status_filter:
-    status_filter = STATUS_OPTIONS + list(df["Status"].unique()) # Include custom + existing
-if not rep_filter:
-    rep_filter = all_reps_combined
-
-# Create sorting column
-df["_sort_date"] = df["Post Date"].apply(parse_date)
-
-# Apply Filters
-filtered_df = df[
-    (df["Status"].isin(status_filter)) & 
-    (df["Sales Rep"].isin(rep_filter))
-]
-
-# Apply Sorting
-if sort_order == "Newest First":
-    filtered_df = filtered_df.sort_values(by="_sort_date", ascending=False)
+    # Show everything EXCEPT dead leads
+    filtered_df = df[~df["Status"].isin(["Lost", "Not Relevant"])]
 else:
-    filtered_df = filtered_df.sort_values(by="_sort_date", ascending=True)
+    # Show ONLY what was selected
+    filtered_df = df[df["Status"].isin(status_filter)]
 
-# Remove helper column
+# 2. Rep Logic
+if rep_filter:
+    filtered_df = filtered_df[filtered_df["Sales Rep"].isin(rep_filter)]
+
+# 3. Sorting Logic
+if sort_cols_selection:
+    col_map = {"Date": "_sort_date", "Status": "Status", "Sales Rep": "Sales Rep", "Salary": "Salary"}
+    actual_sort_cols = [col_map[c] for c in sort_cols_selection]
+    filtered_df = filtered_df.sort_values(by=actual_sort_cols, ascending=sort_ascending)
+
 display_df = filtered_df.drop(columns=["_sort_date"])
 
 # --- METRICS ---
 c1, c2, c3, c4 = st.columns(4)
-c1.metric("Total Leads", len(df))
-c2.metric("Shown Leads", len(display_df))
-c3.metric("New Leads", len(df[df["Status"] == "New"]))
-c4.metric("Hot Leads 🔥", len(df[df["Status"] == "Hot Lead"]))
+c1.metric("Total Active Leads", len(display_df))
+c2.metric("New Leads", len(df[df["Status"] == "New"]))
+c3.metric("Hot Leads 🔥", len(df[df["Status"] == "Hot Lead"]))
+c4.metric("Conversion Fail (Lost)", len(df[df["Status"] == "Lost"]))
 
 st.divider()
 
 # --- EDITOR ---
-st.info(f"💡 Showing {len(display_df)} leads. (Sorted by: {sort_order})")
+st.info(f"💡 Showing {len(display_df)} active leads.")
 
 edited_df = st.data_editor(
     display_df,
@@ -161,7 +146,7 @@ edited_df = st.data_editor(
         "Link": st.column_config.LinkColumn("Link", display_text="Open"),
         "Status": st.column_config.SelectboxColumn("Status", options=STATUS_OPTIONS, required=True),
         "Sales Rep": st.column_config.SelectboxColumn("Sales Rep", options=sales_reps_options),
-        "Salary": st.column_config.TextColumn("Salary 💰", width="medium"), # 4. Added Salary Column
+        "Salary": st.column_config.TextColumn("Salary 💰", width="medium"),
         "Description": st.column_config.TextColumn("Description", width="large"),
         "Contact Info": st.column_config.TextColumn("Contact Info", width="medium"),
         "Post Date": st.column_config.TextColumn("Post Date", width="small"),
@@ -169,25 +154,17 @@ edited_df = st.data_editor(
     hide_index=True
 )
 
-# --- SAVE BUTTON ---
+# --- SAVE ---
 if st.button("💾 Save to Google Sheets", type="primary"):
     try:
-        # Prevent saving partial data (filtered view) over full data
-        # Logic: If filters are active, we only update the rows that changed, 
-        # BUT for simplicity and safety in Streamlit+GSheets, we usually recommend clearing filters first.
-        # However, to be user friendly: We will download FRESH data, update the matching rows, and save back.
-        
-        # Simple Approach for now: Warn if filtered.
         if len(display_df) < len(df):
-             st.warning("⚠️ Warning: You are viewing a filtered list. Saving now usually works, but it's safer to clear filters if you are deleting rows.")
+             st.warning("⚠️ Saving filtered view. For full data safety, clear filters first.")
         
         sheet_obj.clear()
         sheet_obj.append_row(edited_df.columns.tolist())
         sheet_obj.append_rows(edited_df.values.tolist())
-        
-        st.toast("✅ Google Sheet Updated!", icon="☁️")
+        st.toast("✅ Updated!", icon="☁️")
         time.sleep(1)
         st.rerun()
-            
     except Exception as e:
         st.error(f"Save Failed: {e}")
