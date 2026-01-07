@@ -56,17 +56,13 @@ def get_sheet_client():
 
 
 def get_existing_links():
-    """Downloads all existing links from Google Sheets to memory to prevent duplicates."""
+    """Downloads all existing links from Google Sheets to memory."""
     try:
         client = get_sheet_client()
         sheet = client.open(GOOGLE_SHEET_NAME).sheet1
-        
         records = sheet.get_all_values()
-        
-        # Assuming the Link is in Column E (index 4 in 0-based list)
-        # Skip header row and extract column 4
+        # Extract links from column E (index 4)
         links = {row[4] for row in records[1:] if len(row) > 4}
-        
         logging.info(f"📚 Loaded {len(links)} existing leads from Google Sheets.")
         return links
     except Exception as e:
@@ -77,33 +73,25 @@ def get_existing_links():
 # --- HELPER FUNCTIONS ---
 
 def is_salary_too_low(salary_str):
-    """Checks if the salary is below the minimum threshold."""
+    """Checks if salary is below threshold."""
     if not salary_str or "negotiable" in salary_str.lower():
         return False
-    
     clean = salary_str.lower().replace(",", "")
     nums = re.findall(r'\d+(?:\.\d+)?', clean)
-    
     if not nums:
         return False
-    
     val = max([float(n) for n in nums])
-    
-    # Adjust for currency (PHP)
     if "php" in clean or "₱" in clean:
         val /= 58
-        
-    # Check hourly vs monthly
     if "hour" in clean or "hr" in clean:
         return val < 5
     return val < 500
 
 
 def extract_contact_with_ai(text):
-    """Uses OpenAI to find direct contact information."""
+    """Extracts direct contact info using OpenAI."""
     if not client or len(text) < 15:
         return "None"
-    
     try:
         res = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -126,15 +114,12 @@ def extract_contact_with_ai(text):
 
 
 def save_to_google_sheets(new_leads):
-    """Appends new leads to the Google Sheet."""
+    """Appends new leads to Google Sheets."""
     if not new_leads:
         return
-    
     try:
         client = get_sheet_client()
         sheet = client.open(GOOGLE_SHEET_NAME).sheet1
-        
-        # Prepare rows for upload
         rows = [
             [
                 lead["Job Title"],
@@ -149,10 +134,8 @@ def save_to_google_sheets(new_leads):
             ]
             for lead in new_leads
         ]
-        
         sheet.append_rows(rows)
         logging.info(f"☁️ Uploaded {len(rows)} leads.")
-        
     except Exception as e:
         logging.error(f"Sheet Error: {e}")
 
@@ -162,9 +145,9 @@ def save_to_google_sheets(new_leads):
 def run_job_seeker_agent():
     logging.info("🚀 STARTING CLOUD SCRAPER...")
     existing_db_links = get_existing_links()
+    last_processed_url = "None"  # Tracks the very last URL touched
     
     with sync_playwright() as p:
-        # Launch browser options for cloud environment
         browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
         context = browser.new_context(
             user_agent=(
@@ -180,7 +163,6 @@ def run_job_seeker_agent():
             logging.info("Step 1: Logging in...")
             page.goto("https://www.onlinejobs.ph/login", timeout=60000)
             
-            # Check if login fields exist using the specific IDs provided
             if page.locator("#login_username").count() > 0:
                 user = os.getenv("JOB_USERNAME")
                 pwd = os.getenv("JOB_PASSWORD")
@@ -189,64 +171,86 @@ def run_job_seeker_agent():
                     logging.error("❌ Missing Username/Password secrets!")
                     return
                 
-                logging.info("📝 Filling credentials using precise IDs...")
-                
+                logging.info("📝 Filling credentials...")
                 try:
-                    # Fill Email using the exact ID
                     page.fill("#login_username", user)
-                    
-                    # Fill Password using the exact ID
                     page.fill("#login_password", pwd)
-                    
-                    # Click generic submit button
                     page.click("button[type='submit']")
                     
-                    # Wait for navigation
-                    page.wait_for_url("**/jobseekers/*", timeout=30000)
-                    logging.info("✅ Login Success!")
+                    logging.info("⏳ Waiting for login redirection...")
+                    time.sleep(5)
                     
+                    try:
+                        popup_btn = page.locator("button").filter(has_text="Okay, got it")
+                        if popup_btn.count() > 0 and popup_btn.first.is_visible():
+                            logging.info("🚧 Popup detected! Clicking 'Okay'...")
+                            popup_btn.first.click()
+                            time.sleep(3)
+                    except Exception:
+                        pass
+                        
                 except Exception as e:
-                    logging.error(f"❌ Login Failed: {e}")
+                    logging.error(f"❌ Login Action Failed: {e}")
                     page.screenshot(path="login_failed_action.png")
                     return
 
-            # 2. SEARCH
-            logging.info("Step 2: Scanning Jobs...")
-            page.goto("https://www.onlinejobs.ph/jobseekers/jobsearch", timeout=60000)
-            time.sleep(5)
+            # 2. HUMAN NAVIGATION
+            logging.info("Step 2: Navigating via Buttons (Human Mode)...")
             
-            # Verify we are not stuck on login page
-            if "login" in page.url:
-                logging.error("❌ Stuck on login page after search navigation.")
-                page.screenshot(path="stuck_login.png")
+            try:
+                logging.info("🖱️ Clicking 'JOB BOARD'...")
+                page.locator('a[href="https://www.onlinejobs.ph/jobs"]').first.click()
+                page.wait_for_load_state("domcontentloaded")
+                time.sleep(3)
+                
+                logging.info("🖱️ Clicking 'VIEW MORE JOB POSTS'...")
+                page.locator('a[href="/jobseekers/jobsearch"]').first.click()
+                page.wait_for_load_state("domcontentloaded")
+                time.sleep(3)
+                
+                if "jobsearch" not in page.url:
+                    logging.warning(f"⚠️ Unexpected URL: {page.url}")
+                    page.screenshot(path="navigation_failed.png")
+                else:
+                    logging.info("✅ Successfully arrived at Job Search page!")
+
+            except Exception as e:
+                logging.error(f"❌ Navigation Failed: {e}")
+                page.screenshot(path="nav_error.png")
                 return
 
+            # 3. SCANNING LOOP
             batch = []
             consecutive_dupes = 0
             
-            # Scan up to 3 pages or until stopped
-            for page_num in range(3): 
+            # Increased page limit to 50 to ensure "Run until the end" if needed
+            for page_num in range(50): 
                 links = page.locator('div.desc a[href*="/jobseekers/job/"]').all()
                 logging.info(f"Page {page_num+1}: Found {len(links)} links.")
                 
                 if not links:
+                    logging.warning("No links found on this page. End of list.")
                     page.screenshot(path=f"empty_page_{page_num}.png")
                     break
 
                 for link in links:
+                    # Check stop condition (Hit the wall of existing leads)
                     if consecutive_dupes >= DUPLICATE_THRESHOLD:
-                        logging.info("🛑 Threshold reached. Stopping.")
+                        logging.info("🛑 Threshold reached (Found 50 consecutive duplicates). Stopping.")
                         break
                     
                     url = "https://www.onlinejobs.ph" + link.get_attribute("href")
                     
-                    # Check against Google Sheets links
+                    # --- UPDATE TRACKING VARIABLE ---
+                    last_processed_url = url
+                    # --------------------------------
+                    
                     if url in existing_db_links:
                         consecutive_dupes += 1
-                        print(".", end="", flush=True)  # Print dot for duplicate
+                        print(".", end="", flush=True)
                         continue
                     
-                    consecutive_dupes = 0  # Reset counter once a new item is found
+                    consecutive_dupes = 0 
                     logging.info(f"\n🔍 Scanning New: {url}")
                     
                     try:
@@ -260,7 +264,6 @@ def run_job_seeker_agent():
                             
                         desc = desc_el.inner_text()
                         
-                        # Get Title and Salary safely
                         salary = "N/A"
                         if p2.locator("dl > dd > p").count() > 0:
                             salary = p2.locator("dl > dd > p").first.inner_text()
@@ -269,7 +272,6 @@ def run_job_seeker_agent():
                         if p2.locator("h1").count() > 0:
                             title = p2.locator("h1").first.inner_text()
                         
-                        # Quick filter based on salary
                         if is_salary_too_low(salary):
                             p2.close()
                             continue
@@ -286,12 +288,10 @@ def run_job_seeker_agent():
                                 "Link": url,
                                 "Description": desc
                             })
-                            # Add to local memory to avoid rescanning in this run
                             existing_db_links.add(url)
                         
                         p2.close()
                         
-                        # Save in small batches
                         if len(batch) >= 2:
                             save_to_google_sheets(batch)
                             batch = []
@@ -302,18 +302,20 @@ def run_job_seeker_agent():
                 if consecutive_dupes >= DUPLICATE_THRESHOLD:
                     break
                 
-                # Pagination: Go to next page
+                # Pagination
                 try:
                     next_btn = page.locator('ul.pagination li a:has-text(">")')
-                    if next_btn.count() > 0:
+                    if next_btn.count() > 0 and next_btn.is_visible():
+                        logging.info("➡️ Clicking Next Page...")
                         next_btn.click()
                         time.sleep(3)
                     else:
+                        logging.info("🛑 No 'Next' button found. End of scraping.")
                         break
                 except Exception:
+                    logging.warning("End of pagination reached.")
                     break
 
-            # Save any remaining leads
             if batch:
                 save_to_google_sheets(batch)
 
@@ -322,6 +324,7 @@ def run_job_seeker_agent():
             page.screenshot(path="error.png")
         finally:
             browser.close()
+            logging.info(f"🏁 FINAL STATUS: Last Processed Lead: {last_processed_url}")
 
 
 if __name__ == "__main__":
