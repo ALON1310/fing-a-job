@@ -1,0 +1,38 @@
+name: Daily Job Scraper
+
+on:
+  schedule:
+    # 12:00 UTC corresponds to 07:00 AM New York (EST)
+    - cron: '0 12 * * *'
+  workflow_dispatch: # Allows manual run from GitHub UI for testing
+
+jobs:
+  run-scraper:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium
+
+      - name: Create credentials file
+        run: echo '${{ secrets.GCP_CREDENTIALS }}' > credentials.json
+
+      - name: Run Scraper
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          JOB_USERNAME: ${{ secrets.JOB_USERNAME }}
+          JOB_PASSWORD: ${{ secrets.JOB_PASSWORD }}
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
+        run: python scraper_agent.py

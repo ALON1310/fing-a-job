@@ -3,3 +3,8 @@ pandas
 gspread
 oauth2client
 openpyxl
+playwright
+openai
+python-dotenv
+redis
+colorlog
