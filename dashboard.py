@@ -57,11 +57,12 @@ def load_data():
 
 # --- HELPER: PARSE DATE ---
 def parse_date(date_str):
-    if not isinstance(date_str, str): return pd.NaT
+    if not isinstance(date_str, str):
+        return pd.NaT
     try:
         clean = date_str.replace(",", "").strip()
         return pd.to_datetime(clean, format="%b %d %Y", errors='coerce')
-    except:
+    except Exception:
         return pd.NaT
 
 # --- MAIN APP ---
@@ -69,7 +70,8 @@ df, sheet_obj, sales_reps_options = load_data()
 
 expected_cols = ["Job Title", "Salary", "Post Date", "Contact Info", "Link", "Description", "Status", "Sales Rep", "Notes"]
 for col in expected_cols:
-    if col not in df.columns: df[col] = ""
+    if col not in df.columns:
+        df[col] = ""
 
 # --- DEFINED STATUS LIST (The Professional Way) ---
 STATUS_OPTIONS = ["New", "In Progress", "Hot Lead", "Lost", "Not Relevant"]

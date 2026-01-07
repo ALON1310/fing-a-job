@@ -1,19 +1,20 @@
 import os
 import re
 import time
-import redis
 import logging
+from datetime import datetime
+
 import colorlog
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 from dotenv import load_dotenv
-from playwright.sync_api import sync_playwright
+from oauth2client.service_account import ServiceAccountCredentials
 from openai import OpenAI
+from playwright.sync_api import sync_playwright
 
 # --- 1. CONFIGURATION ---
 load_dotenv()
 GOOGLE_SHEET_NAME = "Master_Leads_DB"
-DUPLICATE_THRESHOLD = 5  # Stop scraping if we encounter 5 existing leads in a row
+DUPLICATE_THRESHOLD = 50  # Scans 50 duplicate jobs before stopping
 
 # Logging configuration
 formatter = colorlog.ColoredFormatter(
@@ -23,363 +24,284 @@ formatter = colorlog.ColoredFormatter(
         'DEBUG': 'cyan',
         'INFO': 'green',
         'WARNING': 'yellow',
-        'ERROR': 'red',
-        'CRITICAL': 'red,bg_white'
+        'ERROR': 'red'
     }
 )
 stream_handler = colorlog.StreamHandler()
 stream_handler.setFormatter(formatter)
-file_handler = logging.FileHandler("scraper.log")
-file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+# Clear existing handlers to prevent duplicates
 if logger.hasHandlers():
     logger.handlers.clear()
 logger.addHandler(stream_handler)
-logger.addHandler(file_handler)
 
-# --- 2. SETUP OPENAI ---
+
+# --- 2. SETUP CLIENTS ---
 OPENAI_KEY = os.getenv("OPENAI_API_KEY")
-if not OPENAI_KEY:
-    logging.error("OPENAI_API_KEY not found in .env file!")
-    exit()
+client = OpenAI(api_key=OPENAI_KEY) if OPENAI_KEY else None
 
-client = OpenAI(api_key=OPENAI_KEY)
 
-# --- 3. REDIS SETUP ---
-try:
-    r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
-    r.ping()
-    logging.info("Redis connection successful.")
-except Exception as e:
-    logging.error(f"Could not connect to Redis: {e}. Running without cache.")
-    r = None
+def get_sheet_client():
+    """Establishes connection to Google Sheets."""
+    scope = [
+        "https://spreadsheets.google.com/feeds",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds = ServiceAccountCredentials.from_json_keyfile_name(
+        'credentials.json', scope
+    )
+    return gspread.authorize(creds)
+
+
+def get_existing_links():
+    """Downloads all existing links from Google Sheets to memory to prevent duplicates."""
+    try:
+        client = get_sheet_client()
+        sheet = client.open(GOOGLE_SHEET_NAME).sheet1
+        
+        records = sheet.get_all_values()
+        
+        # Assuming the Link is in Column E (index 4 in 0-based list)
+        # Skip header row and extract column 4
+        links = {row[4] for row in records[1:] if len(row) > 4}
+        
+        logging.info(f"📚 Loaded {len(links)} existing leads from Google Sheets.")
+        return links
+    except Exception as e:
+        logging.warning(f"Could not load existing links: {e}")
+        return set()
+
 
 # --- HELPER FUNCTIONS ---
 
 def is_salary_too_low(salary_str):
-    """
-    Returns True if salary is below threshold ($5/hr or $500/mo).
-    """
+    """Checks if the salary is below the minimum threshold."""
     if not salary_str or "negotiable" in salary_str.lower():
         return False
     
-    clean_text = salary_str.lower().replace(",", "")
-    numbers = re.findall(r'\d+(?:\.\d+)?', clean_text)
+    clean = salary_str.lower().replace(",", "")
+    nums = re.findall(r'\d+(?:\.\d+)?', clean)
     
-    if not numbers:
+    if not nums:
         return False
     
-    values = [float(n) for n in numbers]
-    max_val = max(values)
+    val = max([float(n) for n in nums])
     
-    if "php" in clean_text or "₱" in clean_text:
-        max_val = max_val / 58
+    # Adjust for currency (PHP)
+    if "php" in clean or "₱" in clean:
+        val /= 58
         
-    if "hour" in clean_text or "hr" in clean_text:
-        if max_val < 5:
-            return True
-    else:
-        if max_val < 500:
-            return True
-            
-    return False
+    # Check hourly vs monthly
+    if "hour" in clean or "hr" in clean:
+        return val < 5
+    return val < 500
 
-def save_to_google_sheets(new_leads):
-    """
-    Appends new leads to Google Sheets, avoiding duplicates.
-    """
-    if not new_leads:
-        return
 
-    try:
-        # Connect to Google Sheets
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
-        gs_client = gspread.authorize(creds)
-        
-        sheet = gs_client.open(GOOGLE_SHEET_NAME).sheet1
-        
-        # Get existing data
-        existing_data = sheet.get_all_records()
-        existing_links = {str(row.get('Link', '')) for row in existing_data}
-        
-        # Filter duplicates
-        unique_leads = []
-        for lead in new_leads:
-            if str(lead['Link']) not in existing_links:
-                unique_leads.append(lead)
-        
-        if not unique_leads:
-            logging.info("ℹ️ No new unique leads to upload to Google Sheets.")
-            return
-
-        # Prepare rows for upload (ensure order matches headers)
-        # Note: 'headers' variable removed as it was unused.
-        rows_to_upload = []
-        
-        for lead in unique_leads:
-            row = [
-                lead.get("Job Title", ""),
-                lead.get("Salary", ""),
-                lead.get("Post Date", ""),
-                lead.get("Contact Info", ""),
-                lead.get("Link", ""),
-                lead.get("Description", ""),
-                lead.get("Status", "New"),      # Default
-                lead.get("Sales Rep", "Unassigned"), # Default
-                lead.get("Notes", "")
-            ]
-            rows_to_upload.append(row)
-
-        # Upload
-        sheet.append_rows(rows_to_upload)
-        logging.info(f"☁️ Successfully uploaded {len(rows_to_upload)} new leads to Google Sheets!")
-
-    except Exception as e:
-        logging.error(f"Failed to update Google Sheets: {e}")
-
-def extract_contact_with_ai(overview_text):
-    if not overview_text or len(overview_text) < 15:
+def extract_contact_with_ai(text):
+    """Uses OpenAI to find direct contact information."""
+    if not client or len(text) < 15:
         return "None"
     
-    logging.info("Speed mode: Waiting 3 seconds...")
-    time.sleep(3) 
-
-    system_instruction = """
-    You are a strict Headhunter Assistant that EXTRACTS contact information ONLY. 
-    Your ONLY goal is to find **DIRECT & ORGANIC** communication channels.
-    
-    Data to EXTRACT (Valid - Organic Only):
-    1. **Direct Email:** Personal/Business emails. DECODE obfuscated emails.
-    2. **Direct Phone/Messaging:** WhatsApp, Telegram, Skype ID.
-    3. **Direct Booking Links:** Calendly, SavvyCal, HubSpot Meetings.
-    4. **Personal Profiles:** Personal LinkedIn profile URLs.
-
-    Data to IGNORE (Invalid):
-    1. ❌ Passive Forms (Google Forms, Typeform).
-    2. ❌ Generic/Agency Portals.
-    3. ❌ Generic Career Pages or Support Emails (info@).
-
-    Strict Output Format:
-    - If found: "Type: Value | Type: Value"
-    - If NOTHING found: "None" (Do not add punctuation).
-    """
-
     try:
-        response = client.chat.completions.create(
+        res = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": f"Find contact info in this text:\n{overview_text}"}
+                {
+                    "role": "system",
+                    "content": (
+                        "Extract DIRECT contact info (Email, Phone, WhatsApp, Telegram). "
+                        "Output: 'Type: Value'. If none, output 'None'."
+                    )
+                },
+                {"role": "user", "content": text}
             ],
-            temperature=0 
+            temperature=0
         )
-        return response.choices[0].message.content.strip()
-
+        return res.choices[0].message.content.strip()
     except Exception as e:
-        logging.error(f"OpenAI API Error: {e}")
-        time.sleep(5)
+        logging.error(f"AI Extraction Error: {e}")
         return "None"
 
+
+def save_to_google_sheets(new_leads):
+    """Appends new leads to the Google Sheet."""
+    if not new_leads:
+        return
+    
+    try:
+        client = get_sheet_client()
+        sheet = client.open(GOOGLE_SHEET_NAME).sheet1
+        
+        # Prepare rows for upload
+        rows = [
+            [
+                lead["Job Title"],
+                lead["Salary"],
+                lead["Post Date"],
+                lead["Contact Info"],
+                lead["Link"],
+                lead["Description"],
+                "New",
+                "Unassigned",
+                ""
+            ]
+            for lead in new_leads
+        ]
+        
+        sheet.append_rows(rows)
+        logging.info(f"☁️ Uploaded {len(rows)} leads.")
+        
+    except Exception as e:
+        logging.error(f"Sheet Error: {e}")
+
+
+# --- MAIN AGENT ---
+
 def run_job_seeker_agent():
-    logging.info("🚀 STARTING PRODUCTION SCRAPER (Smart Stop Mode)...")
+    logging.info("🚀 STARTING CLOUD SCRAPER...")
+    existing_db_links = get_existing_links()
     
     with sync_playwright() as p:
-        user_data_dir = os.path.join(os.getcwd(), "user_data")
-        browser_context = p.chromium.launch_persistent_context(
-            user_data_dir, headless=True, args=["--disable-blink-features=AutomationControlled"]
+        # Launch browser options for cloud environment
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
+        context = browser.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            )
         )
-        page = browser_context.pages[0] if browser_context.pages else browser_context.new_page()
+        page = context.new_page()
 
-        logging.info("PHASE 1: AUTHENTICATION")
-        page.goto("https://www.onlinejobs.ph/login", wait_until="domcontentloaded", timeout=0)
-        
-        if "login" in page.url:
-             logging.warning("Login required! Please run with headless=False once.")
-             browser_context.close()
-             return
-
-        logging.info("Navigating to job search results...")
-        page.goto("https://www.onlinejobs.ph/jobseekers/jobsearch", wait_until="domcontentloaded", timeout=0)
-        
         try:
-            page.wait_for_selector('.results', timeout=0)
-        except Exception:
-             logging.error("Could not load results.")
-             browser_context.close()
-             return
-             
-        time.sleep(3)
-
-        batch_results = [] 
-        seen_ids = set()
-        stop_scraping = False 
-        consecutive_existing_leads = 0 # Counter for stop condition
-        
-        while not stop_scraping:
-            logging.info(f"Scanning page... Current Batch: {len(batch_results)}")
+            # 1. LOGIN
+            logging.info("Step 1: Logging in...")
+            page.goto("https://www.onlinejobs.ph/login", timeout=60000)
             
-            raw_links = page.locator('div.desc a[href*="/jobseekers/job/"]').all()
-            if not raw_links:
-                logging.warning("⚠️ WARNING: Found 0 links! The site layout might have changed.")
-
-            unique_urls = []
-            for link in raw_links:
-                url = link.get_attribute("href")
-                if url:
-                    match = re.search(r'(\d+)$', url.split('?')[0].rstrip('/'))
-                    if match and match.group(1) not in seen_ids:
-                        seen_ids.add(match.group(1))
-                        unique_urls.append(url)
-
-            logging.info(f"Found {len(unique_urls)} potential leads on this page.")
-
-            if len(unique_urls) == 0:
-                 logging.warning("No new unique links on this page. Stopping.")
-                 break
-
-            for profile_url in unique_urls:
-                full_url = "https://www.onlinejobs.ph" + profile_url
+            if "login" in page.url:
+                user = os.getenv("JOB_USERNAME")
+                pwd = os.getenv("JOB_PASSWORD")
                 
-                # --- CHECK REDIS (CACHE) FOR STOP CONDITION ---
-                if r and r.exists(full_url):
-                    consecutive_existing_leads += 1
-                    logging.info(f"⏭️ Lead already exists ({consecutive_existing_leads}/{DUPLICATE_THRESHOLD}). Skipping...")
-                    
-                    if consecutive_existing_leads >= DUPLICATE_THRESHOLD:
-                        logging.info(f"🛑 Reached {DUPLICATE_THRESHOLD} existing leads in a row. We are caught up! Stopping.")
-                        stop_scraping = True
-                        break # Break inner loop
-                    
-                    continue # Skip this specific lead
-                else:
-                    consecutive_existing_leads = 0 # Reset counter if we find a new lead
+                if not user or not pwd:
+                    logging.error("❌ Missing Username/Password secrets!")
+                    return
                 
-                # --- PROCESS NEW LEAD ---
+                page.fill("input[name='email']", user)
+                page.fill("input[type='password']", pwd)
+                page.click("button[type='submit']")
+                
                 try:
-                    candidate_page = browser_context.new_page()
-                    candidate_page.goto(full_url, wait_until="domcontentloaded", timeout=0)
-                    time.sleep(2)
+                    page.wait_for_url("**/jobseekers/*", timeout=30000)
+                    logging.info("✅ Login Success!")
+                except Exception:
+                    logging.error("❌ Login Failed/Timeout.")
+                    page.screenshot(path="login_failed.png")
+                    return
 
-                    # Extract basic data
-                    date_sel = "body > div > section.bg-ltblue.pt-4.pt-lg-0 > div > div.card.job-post.shadow.mb-4.mb-md-0 > div > div > div:nth-child(4) > dl > dd > p"
-                    if candidate_page.locator(date_sel).count() > 0:
-                        post_date_str = candidate_page.locator(date_sel).inner_text().strip()
-                    else:
-                        post_date_str = "N/A"
-                    
-                    title_sel = "h1"
-                    if candidate_page.locator(title_sel).count() > 0:
-                        title = candidate_page.locator(title_sel).first.inner_text().strip()
-                    else:
-                        title = "N/A"
+            # 2. SEARCH
+            logging.info("Step 2: Scanning Jobs...")
+            page.goto("https://www.onlinejobs.ph/jobseekers/jobsearch", timeout=60000)
+            time.sleep(5)
+            page.screenshot(path="search_page.png")
 
-                    sal_sel = "dl > dd > p"
-                    if candidate_page.locator(sal_sel).count() > 0:
-                        salary = candidate_page.locator(sal_sel).nth(0).inner_text().strip()
-                    else:
-                        salary = "N/A"
+            batch = []
+            consecutive_dupes = 0
+            
+            # Scan up to 3 pages or until stopped
+            for page_num in range(3): 
+                links = page.locator('div.desc a[href*="/jobseekers/job/"]').all()
+                logging.info(f"Page {page_num+1}: Found {len(links)} links.")
+                
+                if not links:
+                    page.screenshot(path=f"empty_page_{page_num}.png")
+                    break
+
+                for link in links:
+                    if consecutive_dupes >= DUPLICATE_THRESHOLD:
+                        logging.info("🛑 Threshold reached. Stopping.")
+                        break
                     
-                    # SALARY FILTER CHECK
-                    if is_salary_too_low(salary):
-                        logging.warning(f"📉 Low Salary: {salary}. Marking processed.")
-                        if r:
-                            r.set(full_url, "processed", ex=2592000)
-                        candidate_page.close()
+                    url = "https://www.onlinejobs.ph" + link.get_attribute("href")
+                    
+                    # Check against Google Sheets links
+                    if url in existing_db_links:
+                        consecutive_dupes += 1
+                        print(".", end="", flush=True)  # Print dot for duplicate
                         continue
                     
-                    desc_sel = '//*[@id="job-description"]'
-                    if candidate_page.locator(desc_sel).count() > 0:
-                        desc = candidate_page.locator(desc_sel).inner_text().strip()
-                    else:
-                        desc = "N/A"
-
-                    logging.info(f"Processing: {title} | Salary: {salary}")
+                    consecutive_dupes = 0  # Reset counter once a new item is found
+                    logging.info(f"\n🔍 Scanning New: {url}")
                     
-                    contact_info = extract_contact_with_ai(desc)
-
-                    # DOUBLE FILTER VALIDATION
-                    is_valid = False
-                    contact_lower = contact_info.lower() if contact_info else ""
-                    
-                    if contact_info and "none" not in contact_lower and len(contact_info) > 5:
-                        allow_signals = ["@", "type:", "phone", "whatsapp", "telegram", "signal", "calendly", "savvycal", "hubspot", "linkedin.com/in/", "+"]
-                        has_allow_signal = any(sig in contact_lower for sig in allow_signals)
-                        block_signals = ["forms.gle", "docs.google.com/forms", "typeform", "surveymonkey", "bamboohr", "workable", "apply"]
-                        has_block_signal = any(sig in contact_lower for sig in block_signals)
-
-                        if has_allow_signal and not has_block_signal:
-                            is_valid = True
-                    
-                    if is_valid:
-                        new_lead = {
-                            "Job Title": title, 
-                            "Salary": salary, 
-                            "Post Date": post_date_str, 
-                            "Contact Info": contact_info, 
-                            "Link": full_url, 
-                            "Description": desc,
-                            "Status": "New", 
-                            "Sales Rep": "Unassigned", 
-                            "Notes": ""
-                        }
-                        batch_results.append(new_lead)
-                        # Important: Mark as processed in Redis so next time we know to stop here
-                        if r:
-                            r.set(full_url, "processed", ex=2592000)
-                        logging.info(f"✅ Lead Found! {contact_info}")
-
-                        # Save every 3 leads
-                        if len(batch_results) >= 3:
-                            save_to_google_sheets(batch_results)
-                            batch_results = [] 
-                    else:
-                        logging.warning(f"Discarding: {contact_info}")
-                        # Even if discarded (no contact info), mark as processed so we don't scan it again
-                        if r:
-                            r.set(full_url, "processed", ex=2592000)
-
-                    candidate_page.close()
-
-                except Exception as e:
-                    logging.error(f"Error processing {full_url}: {e}")
                     try:
-                        candidate_page.close() 
-                    except Exception:
-                        pass
-                    continue
-            
-            if stop_scraping:
-                break
-            
-            # PAGINATION
-            logging.info("Moving to NEXT page...")
-            try:
-                next_btn = page.locator('ul.pagination li a:has-text(">")') 
-                if next_btn.count() > 0 and next_btn.is_visible():
-                    next_btn.click(force=True)
-                    try:
-                        page.wait_for_load_state("domcontentloaded", timeout=0)
-                        time.sleep(3)
-                    except Exception:
-                        time.sleep(10)
-                else:
-                    logging.info("No 'Next' button found. End of list.")
-                    stop_scraping = True
+                        p2 = context.new_page()
+                        p2.goto(url, timeout=30000)
+                        
+                        desc = p2.locator('#job-description').inner_text()
+                        
+                        # Handle potential missing elements gracefully
+                        salary_element = p2.locator("dl > dd > p").first
+                        salary = salary_element.inner_text() if salary_element.count() > 0 else "N/A"
+                        
+                        title_element = p2.locator("h1").first
+                        title = title_element.inner_text() if title_element.count() > 0 else "N/A"
+                        
+                        # Quick filter based on salary
+                        if is_salary_too_low(salary):
+                            p2.close()
+                            continue
+                            
+                        contact = extract_contact_with_ai(desc)
+                        
+                        if "None" not in contact and len(contact) > 5:
+                            logging.info(f"💎 HIT: {contact}")
+                            batch.append({
+                                "Job Title": title,
+                                "Salary": salary,
+                                "Post Date": datetime.now().strftime("%b %d %Y"),
+                                "Contact Info": contact,
+                                "Link": url,
+                                "Description": desc
+                            })
+                            # Add to local memory to avoid rescanning in this run
+                            existing_db_links.add(url)
+                        
+                        p2.close()
+                        
+                        # Save in small batches
+                        if len(batch) >= 2:
+                            save_to_google_sheets(batch)
+                            batch = []
+                            
+                    except Exception as e:
+                        logging.error(f"Link Error: {e}")
+
+                if consecutive_dupes >= DUPLICATE_THRESHOLD:
                     break
-            except Exception: 
-                stop_scraping = True
-                break
+                
+                # Pagination: Go to next page
+                try:
+                    next_btn = page.locator('ul.pagination li a:has-text(">")')
+                    if next_btn.count() > 0:
+                        next_btn.click()
+                        time.sleep(3)
+                    else:
+                        break
+                except Exception:
+                    break
 
-        browser_context.close()
-        
-        # Save any remaining leads
-        if batch_results:
-            save_to_google_sheets(batch_results)
-            
-        logging.info("🎉 Scraper Finished Successfully.")
+            # Save any remaining leads
+            if batch:
+                save_to_google_sheets(batch)
+
+        except Exception as e:
+            logging.error(f"CRITICAL: {e}")
+            page.screenshot(path="error.png")
+        finally:
+            browser.close()
+
 
 if __name__ == "__main__":
     run_job_seeker_agent()
