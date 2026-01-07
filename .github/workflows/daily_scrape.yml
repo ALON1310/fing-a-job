@@ -2,37 +2,51 @@ name: Daily Job Scraper
 
 on:
   schedule:
-    # 12:00 UTC corresponds to 07:00 AM New York (EST)
+    # Run every day at 12:00 UTC (which is 07:00 AM New York time)
     - cron: '0 12 * * *'
-  workflow_dispatch: # Allows manual run from GitHub UI for testing
+  
+  # Allow manual trigger from GitHub Actions UI for testing
+  workflow_dispatch:
 
 jobs:
   run-scraper:
     runs-on: ubuntu-latest
 
     steps:
+      # Step 1: Get the code from the repository
       - name: Checkout code
         uses: actions/checkout@v3
 
+      # Step 2: Install Python 3.9
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
+      # Step 3: Install libraries and browser dependencies (Crucial for Linux)
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
           playwright install chromium
+          playwright install-deps
 
+      # Step 4: Recreate the 'credentials.json' file from GitHub Secrets
       - name: Create credentials file
         run: echo '${{ secrets.GCP_CREDENTIALS }}' > credentials.json
 
+      # Step 5: Run the Python bot with all necessary passwords
       - name: Run Scraper
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           JOB_USERNAME: ${{ secrets.JOB_USERNAME }}
           JOB_PASSWORD: ${{ secrets.JOB_PASSWORD }}
-          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
-          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-          EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
         run: python scraper_agent.py
+
+      # Step 6: If the bot fails, upload screenshots so we can see what happened
+      - name: Upload Debug Screenshots
+        if: always() 
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-screenshots
+          path: "*.png"
+          retention-days: 5
