@@ -14,7 +14,7 @@ from playwright.sync_api import sync_playwright
 # --- 1. CONFIGURATION ---
 load_dotenv()
 GOOGLE_SHEET_NAME = "Master_Leads_DB"
-DUPLICATE_THRESHOLD = 50  # Scans 50 duplicate jobs before stopping
+DUPLICATE_THRESHOLD = 50  # Stop scraping after finding 50 duplicate jobs in a row
 
 # Logging configuration
 formatter = colorlog.ColoredFormatter(
@@ -33,7 +33,6 @@ stream_handler.setFormatter(formatter)
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Clear existing handlers to prevent duplicates
 if logger.hasHandlers():
     logger.handlers.clear()
 logger.addHandler(stream_handler)
@@ -181,7 +180,8 @@ def run_job_seeker_agent():
             logging.info("Step 1: Logging in...")
             page.goto("https://www.onlinejobs.ph/login", timeout=60000)
             
-            if "login" in page.url:
+            # Check if login fields exist using the specific IDs provided
+            if page.locator("#login_username").count() > 0:
                 user = os.getenv("JOB_USERNAME")
                 pwd = os.getenv("JOB_PASSWORD")
                 
@@ -189,23 +189,37 @@ def run_job_seeker_agent():
                     logging.error("❌ Missing Username/Password secrets!")
                     return
                 
-                page.fill("input[name='email']", user)
-                page.fill("input[type='password']", pwd)
-                page.click("button[type='submit']")
+                logging.info("📝 Filling credentials using precise IDs...")
                 
                 try:
+                    # Fill Email using the exact ID
+                    page.fill("#login_username", user)
+                    
+                    # Fill Password using the exact ID
+                    page.fill("#login_password", pwd)
+                    
+                    # Click generic submit button
+                    page.click("button[type='submit']")
+                    
+                    # Wait for navigation
                     page.wait_for_url("**/jobseekers/*", timeout=30000)
                     logging.info("✅ Login Success!")
-                except Exception:
-                    logging.error("❌ Login Failed/Timeout.")
-                    page.screenshot(path="login_failed.png")
+                    
+                except Exception as e:
+                    logging.error(f"❌ Login Failed: {e}")
+                    page.screenshot(path="login_failed_action.png")
                     return
 
             # 2. SEARCH
             logging.info("Step 2: Scanning Jobs...")
             page.goto("https://www.onlinejobs.ph/jobseekers/jobsearch", timeout=60000)
             time.sleep(5)
-            page.screenshot(path="search_page.png")
+            
+            # Verify we are not stuck on login page
+            if "login" in page.url:
+                logging.error("❌ Stuck on login page after search navigation.")
+                page.screenshot(path="stuck_login.png")
+                return
 
             batch = []
             consecutive_dupes = 0
@@ -239,14 +253,21 @@ def run_job_seeker_agent():
                         p2 = context.new_page()
                         p2.goto(url, timeout=30000)
                         
-                        desc = p2.locator('#job-description').inner_text()
+                        desc_el = p2.locator('#job-description')
+                        if desc_el.count() == 0:
+                            p2.close()
+                            continue
+                            
+                        desc = desc_el.inner_text()
                         
-                        # Handle potential missing elements gracefully
-                        salary_element = p2.locator("dl > dd > p").first
-                        salary = salary_element.inner_text() if salary_element.count() > 0 else "N/A"
-                        
-                        title_element = p2.locator("h1").first
-                        title = title_element.inner_text() if title_element.count() > 0 else "N/A"
+                        # Get Title and Salary safely
+                        salary = "N/A"
+                        if p2.locator("dl > dd > p").count() > 0:
+                            salary = p2.locator("dl > dd > p").first.inner_text()
+                            
+                        title = "N/A"
+                        if p2.locator("h1").count() > 0:
+                            title = p2.locator("h1").first.inner_text()
                         
                         # Quick filter based on salary
                         if is_salary_too_low(salary):
