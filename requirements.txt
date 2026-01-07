@@ -6,5 +6,4 @@ openpyxl
 playwright
 openai
 python-dotenv
-redis
 colorlog
