@@ -3,16 +3,16 @@ import re
 import time
 import json
 import logging
-from logging.handlers import RotatingFileHandler
-from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Set, List, Callable, Tuple, Optional
 
-import colorlog
 from dotenv import load_dotenv
 from openai import OpenAI
 from playwright.sync_api import sync_playwright
 from sheets_client import get_sheet_client
+
+# --- NEW: Import shared tools ---
+from utils import setup_logging
 
 # -----------------------------
 # 1) CONFIGURATION
@@ -29,58 +29,11 @@ DEBUG_SAVE_ALL = os.getenv("DEBUG_SAVE_ALL", "0").strip().lower() in ("1", "true
 
 # Logging options
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
-LOG_DIR = Path(os.getenv("LOG_DIR", "logs")).resolve()
-LOG_DIR.mkdir(parents=True, exist_ok=True)
-
-RUN_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
-LOG_FILE = LOG_DIR / f"scraper_{RUN_ID}.log"
-
 
 # -----------------------------
 # 2) LOGGING SETUP
 # -----------------------------
-
-def setup_logging() -> None:
-    """Setup colored console logs + rotating file logs."""
-    level = getattr(logging, LOG_LEVEL, logging.INFO)
-    root = logging.getLogger()
-    root.setLevel(level)
-
-    if root.hasHandlers():
-        root.handlers.clear()
-
-    # Console (colored)
-    console_formatter = colorlog.ColoredFormatter(
-        "%(log_color)s%(asctime)s - %(levelname)s - %(message)s",
-        datefmt="%H:%M:%S",
-        log_colors={
-            "DEBUG": "cyan",
-            "INFO": "green",
-            "WARNING": "yellow",
-            "ERROR": "red",
-        },
-    )
-    console_handler = colorlog.StreamHandler()
-    console_handler.setLevel(level)
-    console_handler.setFormatter(console_formatter)
-
-    # File (plain)
-    file_formatter = logging.Formatter(
-        "%(asctime)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-    file_handler = RotatingFileHandler(
-        LOG_FILE, maxBytes=2_000_000, backupCount=5, encoding="utf-8"
-    )
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(file_formatter)
-
-    root.addHandler(console_handler)
-    root.addHandler(file_handler)
-
-    logging.info(f"🧾 Logging to file: {LOG_FILE}")
-
-
+# Use the shared logging setup from utils.py
 setup_logging()
 
 
@@ -225,7 +178,7 @@ def has_real_contact(contact_str: str) -> bool:
         return True
     return False
 
-# --- HERE IS THE CRITICAL PART FOR IMPORTING ---
+
 def extract_data_with_ai(job_description: str, job_title: str) -> Dict[str, Any]:
     if not client or not job_description or len(job_description) < 15:
         return {"contact": "None", "name": "there", "hook": ""}
@@ -277,7 +230,6 @@ Best regards,
 Platonics Team
 www.platonics.co
 """
-# -----------------------------------------------
 
 
 # -----------------------------

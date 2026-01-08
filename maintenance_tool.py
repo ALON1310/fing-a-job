@@ -1,3 +1,12 @@
+#!/usr/bin/env python3
+"""
+maintenance_tool.py (REFACTORED - Connected to utils.py)
+
+Logic remains identical.
+- Uses shared logging from utils.py.
+- Maintains AI enrichment and Smart Reset logic.
+"""
+
 import os
 import time
 import logging
@@ -5,16 +14,16 @@ from dotenv import load_dotenv
 from sheets_client import get_sheet_client
 from scraper_agent import extract_data_with_ai, generate_email_body
 
+# --- NEW: Import shared tools ---
+from utils import setup_logging
+
 # --- CONFIGURATION ---
 load_dotenv()
 SHEET_NAME = os.getenv("SHEET", "Master_Leads_DB")  
 
-# Logging setup
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
-    datefmt="%H:%M:%S"
-)
+# --- LOGGING SETUP ---
+# Use the shared logging setup from utils.py
+setup_logging()
 
 def clean_and_enrich_db():
     logging.info("🚀 STARTING MAINTENANCE AGENT (Smart Clean & Reset)")

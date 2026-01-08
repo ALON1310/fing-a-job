@@ -1,27 +1,31 @@
 #!/usr/bin/env python3
 """
-sender_agent.py (FINAL - With CRM Status Protection)
+sender_agent.py (REFACTORED - Connected to utils.py)
 
-Updates:
-1. CHECKS CRM STATUS: If 'Status' is In Progress/Hot/Lost -> SKIPS.
-2. Only sends to 'New' or empty Status.
-3. Chunk saving logic included.
+Logic remains identical, but helper functions are now imported from utils.py.
 """
 
 from __future__ import annotations
 
 import logging
 import os
-import re
 import smtplib
 import time
-from datetime import datetime, timezone
+import re
 from email.message import EmailMessage
 from typing import Dict, List, Tuple
 
 from dotenv import load_dotenv
 from sheets_client import get_sheet_client
 
+# --- NEW: Import shared tools ---
+from utils import (
+    setup_logging, 
+    get_timestamp_iso, 
+    extract_email, 
+    colnum_to_a1, 
+    ensure_columns
+)
 
 # -------------------- ENV --------------------
 load_dotenv()
@@ -36,8 +40,8 @@ SEND_LIMIT = int(os.getenv("SEND_LIMIT", "500"))
 SLEEP_BETWEEN_SENDS_SEC = float(os.getenv("SLEEP_BETWEEN_SENDS_SEC", "0.7"))
 
 # Safety & Batching
-BATCH_SAVE_SIZE = 10   # שמור כל 10 לידים
-BATCH_SLEEP_SEC = 2.0  # תנוח 2 שניות אחרי שמירה
+BATCH_SAVE_SIZE = 10
+BATCH_SLEEP_SEC = 2.0
 
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", "2"))
 RETRY_SLEEP_SEC = float(os.getenv("RETRY_SLEEP_SEC", "1.0"))
@@ -52,33 +56,12 @@ MAIL_BCC = os.getenv("MAIL_BCC", "").strip()
 
 
 # -------------------- LOGGING --------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
+# Use the shared logging setup
+setup_logging()
 
 
-# -------------------- HELPERS --------------------
-def now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def colnum_to_a1(n: int) -> str:
-    if n < 1:
-        raise ValueError("Column number must be >= 1")
-    letters = ""
-    while n:
-        n, rem = divmod(n - 1, 26)
-        letters = chr(65 + rem) + letters
-    return letters
-
-
-def extract_email(text: str) -> str:
-    if not text:
-        return ""
-    m = re.search(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", text, re.I)
-    return m.group(0) if m else ""
-
+# -------------------- LOCAL HELPERS --------------------
+# (These remain here because they are specific to Sheets logic)
 
 def get_cell(row: List[str], headers: List[str], col: str) -> str:
     try:
@@ -93,14 +76,6 @@ def set_cell(row: List[str], headers: List[str], col: str, value: str) -> None:
     while len(row) <= idx:
         row.append("")
     row[idx] = value
-
-
-def ensure_columns(headers: List[str], required: List[str]) -> List[str]:
-    updated = list(headers)
-    for c in required:
-        if c not in updated:
-            updated.append(c)
-    return updated
 
 
 def default_subject_from_row(headers: List[str], row: List[str]) -> str:
@@ -180,7 +155,7 @@ def run_sender_agent() -> None:
     data_rows = all_values[1:]
     headers = list(headers_norm)
 
-    # Ensure tracking columns
+    # Ensure tracking columns (Using UTILS function)
     tracking_cols = ["Send Mode", "Send Status", "Send Attempts", "Last Error", "Last Sent At"]
     new_headers = ensure_columns(headers, tracking_cols)
 
@@ -215,31 +190,30 @@ def run_sender_agent() -> None:
         # Skip if handled
         if send_status in ("SENT", "SKIPPED", "MANUAL_CHECK", "PENDING"):
             if send_status == "PENDING" and MODE == "REAL":
-                pass # Retry pending in REAL mode
+                pass 
             else:
                 continue
 
-        # --- 🛡️ SAFETY CHECK: CRM STATUS ---
-        # If the lead is In Progress / Lost / Hot -> DO NOT SEND.
+        # --- CRM SAFETY CHECK ---
         crm_status = get_cell(row, headers_norm, "Status").strip().lower()
         if crm_status not in ("", "new"):
-            # Mark as skipped so we don't check it again
             set_cell(row, headers_norm, "Send Status", "SKIPPED")
             set_cell(row, headers_norm, "Last Error", f"Skipped due to Status: {crm_status}")
             
             if not VERIFY_ONLY:
+                # Using UTILS colnum_to_a1
                 last_col = colnum_to_a1(len(headers_norm))
                 range_name = f"A{row_idx}:{last_col}{row_idx}"
                 batch_ranges.append({"range": range_name, "values": [row]})
-            
             continue
-        # -----------------------------------
 
         if not VERIFY_ONLY and sent_count >= SEND_LIMIT:
             logging.info(f"🛑 Reached global SEND_LIMIT={SEND_LIMIT}. Stopping loop.")
             break
 
         contact_raw = get_cell(row, headers_norm, "Contact Info").strip()
+        
+        # Using UTILS extract_email
         to_email = extract_email(contact_raw)
         
         # --- LOGIC START ---
@@ -327,7 +301,8 @@ def run_sender_agent() -> None:
                         if ok:
                             set_cell(row, headers_norm, "Send Status", "SENT")
                             set_cell(row, headers_norm, "Last Error", "")
-                            set_cell(row, headers_norm, "Last Sent At", now_iso())
+                            # Using UTILS get_timestamp_iso
+                            set_cell(row, headers_norm, "Last Sent At", get_timestamp_iso())
                             sent_count += 1
                             time.sleep(SLEEP_BETWEEN_SENDS_SEC)
                         else:
@@ -344,14 +319,14 @@ def run_sender_agent() -> None:
             logging.info(f"💾 Saving batch of {len(batch_ranges)} rows to Sheets...")
             try:
                 ws.batch_update(batch_ranges)
-                batch_ranges = [] # Clear memory
+                batch_ranges = []
                 rows_processed_in_batch = 0
                 logging.info(f"☕ Pausing for {BATCH_SLEEP_SEC}s to respect quotas...")
                 time.sleep(BATCH_SLEEP_SEC)
             except Exception as e:
                 logging.error(f"❌ Batch Save Failed: {e}")
 
-    # Final Save (Leftovers)
+    # Final Save
     if not VERIFY_ONLY and batch_ranges:
         logging.info(f"💾 Saving final {len(batch_ranges)} rows...")
         ws.batch_update(batch_ranges)
