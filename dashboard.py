@@ -3,19 +3,30 @@ import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import time
+import os
+from dotenv import load_dotenv
 
-# --- UI CONFIG ---
+# --- CONFIG ---
 st.set_page_config(page_title="Master CRM (Cloud)", page_icon="☁️", layout="wide")
 st.title("☁️ Master Sales CRM (Google Sheets)")
+
+# Load Env (local dev)
+load_dotenv()
 
 # --- CONNECTION FUNCTION ---
 def get_gspread_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    try:
-        creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
-        return gspread.authorize(creds)
-    except Exception:
-        pass
+    
+    # Option 1: Local File
+    creds_file = os.getenv("GOOGLE_CREDS_FILE", "credentials.json")
+    if os.path.exists(creds_file):
+        try:
+            creds = ServiceAccountCredentials.from_json_keyfile_name(creds_file, scope)
+            return gspread.authorize(creds)
+        except Exception:
+            pass
+            
+    # Option 2: Streamlit Secrets (Cloud)
     try:
         key_dict = {
             "type": st.secrets["gcp_service_account"]["type"],
@@ -38,19 +49,29 @@ def get_gspread_client():
 def load_data():
     client = get_gspread_client()
     if not client:
-        st.error("🚨 Authentication Error.")
+        st.error("🚨 Authentication Error. Check credentials.")
         st.stop()
+        
+    sheet_name = os.getenv("SHEET", "Master_Leads_DB") # Matches your .env
+    
     try:
-        sheet = client.open("Master_Leads_DB").sheet1
+        # Open the main spreadsheet file
+        main_doc = client.open(sheet_name)
+        
+        # Select the first sheet (Active Leads)
+        sheet = main_doc.sheet1
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
+        
+        # Try to load sales reps options (optional)
         try:
-            settings_sheet = client.open("Master_Leads_DB").worksheet("Settings")
+            settings_sheet = main_doc.worksheet("Settings")
             reps_list = settings_sheet.col_values(1)
             sales_reps_options = [x for x in reps_list if x and x != "Sales Reps"]
         except gspread.WorksheetNotFound:
             sales_reps_options = ["Dor", "Alon", "Unassigned"]
-        return df, sheet, sales_reps_options
+            
+        return df, sheet, main_doc, sales_reps_options
     except Exception as e:
         st.error(f"⚠️ Error connecting to Google Sheet: {e}")
         st.stop()
@@ -66,14 +87,25 @@ def parse_date(date_str):
         return pd.NaT
 
 # --- MAIN APP ---
-df, sheet_obj, sales_reps_options = load_data()
+df, sheet_obj, main_doc_obj, sales_reps_options = load_data()
 
-expected_cols = ["Job Title", "Salary", "Post Date", "Contact Info", "Link", "Description", "Status", "Sales Rep", "Notes"]
-for col in expected_cols:
+# Ensure ALL columns exist (CRM + Automation) - Critical for saving!
+all_cols = [
+    "Job Title", "Salary", "Post Date", "Contact Info", "Link", "Description", 
+    "Status", "Sales Rep", "Notes", 
+    "Send Mode", "Send Status", "Send Attempts", "Last Error", "Last Sent At",
+    "Draft Email", "Email Subject"
+]
+
+for col in all_cols:
     if col not in df.columns:
         df[col] = ""
 
-# --- DEFINED STATUS LIST (The Professional Way) ---
+# --- CRITICAL FIX: Force Salary to be Text ---
+df["Salary"] = df["Salary"].astype(str)
+df["Contact Info"] = df["Contact Info"].astype(str)
+
+# --- STATUS LIST ---
 STATUS_OPTIONS = ["New", "In Progress", "Hot Lead", "Lost", "Not Relevant"]
 
 # --- PRE-PROCESSING ---
@@ -83,7 +115,7 @@ df["_sort_date"] = df["Post Date"].apply(parse_date)
 with st.sidebar:
     st.header("🔍 Filters & Sorting")
     
-    st.subheader("Sort Options")
+    # Sort
     sort_cols_selection = st.multiselect(
         "Sort By:", 
         options=["Date", "Status", "Sales Rep", "Salary"],
@@ -93,27 +125,26 @@ with st.sidebar:
     
     st.divider()
     
-    # STATUS FILTER
+    # Status Filter
     status_filter = st.multiselect(
         "Filter Status:", 
         options=STATUS_OPTIONS,
         default=[] 
     )
     
-    # REP FILTER
-    existing_reps_in_db = df["Sales Rep"].unique().tolist() if "Sales Rep" in df.columns else []
-    all_reps_combined = list(set(sales_reps_options + existing_reps_in_db))
-    rep_filter = st.multiselect("Filter Sales Rep:", options=all_reps_combined, default=[])
+    # Rep Filter
+    existing_reps = df["Sales Rep"].unique().tolist() if "Sales Rep" in df.columns else []
+    all_reps = list(set(sales_reps_options + existing_reps))
+    rep_filter = st.multiselect("Filter Sales Rep:", options=all_reps, default=[])
 
-# --- APPLY LOGIC ---
+# --- FILTERING LOGIC ---
+filtered_df = df.copy()
 
-# 1. Status Logic: Hide "Lost" and "Not Relevant" unless explicitly selected
+# 1. Status Logic
 if not status_filter:
-    # Show everything EXCEPT dead leads
-    filtered_df = df[~df["Status"].isin(["Lost", "Not Relevant"])]
+    filtered_df = filtered_df[~filtered_df["Status"].isin(["Lost", "Not Relevant"])]
 else:
-    # Show ONLY what was selected
-    filtered_df = df[df["Status"].isin(status_filter)]
+    filtered_df = filtered_df[filtered_df["Status"].isin(status_filter)]
 
 # 2. Rep Logic
 if rep_filter:
@@ -125,22 +156,30 @@ if sort_cols_selection:
     actual_sort_cols = [col_map[c] for c in sort_cols_selection]
     filtered_df = filtered_df.sort_values(by=actual_sort_cols, ascending=sort_ascending)
 
-display_df = filtered_df.drop(columns=["_sort_date"])
+# --- DISPLAY ---
+display_columns = [
+    "Job Title", "Salary", "Post Date", "Contact Info", "Link", 
+    "Description", "Status", "Sales Rep", "Notes", "Draft Email", "Send Status"
+]
+
+editor_view = filtered_df[display_columns].copy()
 
 # --- METRICS ---
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Total Active Leads", len(display_df))
+c1, c2, c3, c4, c5 = st.columns(5)
+c1.metric("Active Leads", len(filtered_df))
 c2.metric("New Leads", len(df[df["Status"] == "New"]))
 c3.metric("Hot Leads 🔥", len(df[df["Status"] == "Hot Lead"]))
-c4.metric("Conversion Fail (Lost)", len(df[df["Status"] == "Lost"]))
+c4.metric("Sent ✉️", len(df[df["Send Status"] == "SENT"]))
+manual_count = len(df[df["Send Status"] == "MANUAL_CHECK"])
+c5.metric("Manual Check ✋", manual_count)
 
 st.divider()
 
 # --- EDITOR ---
-st.info(f"💡 Showing {len(display_df)} active leads.")
+st.info(f"💡 Showing {len(editor_view)} leads.")
 
-edited_df = st.data_editor(
-    display_df,
+edited_view = st.data_editor(
+    editor_view,
     num_rows="dynamic",
     use_container_width=True,
     height=600,
@@ -151,22 +190,53 @@ edited_df = st.data_editor(
         "Salary": st.column_config.TextColumn("Salary 💰", width="medium"),
         "Description": st.column_config.TextColumn("Description", width="large"),
         "Contact Info": st.column_config.TextColumn("Contact Info", width="medium"),
-        "Post Date": st.column_config.TextColumn("Post Date", width="small"),
+        "Draft Email": st.column_config.TextColumn("Draft Email", width="large"),
+        "Send Status": st.column_config.TextColumn("Send Status", disabled=True), 
     },
     hide_index=True
 )
 
-# --- SAVE ---
-if st.button("💾 Save to Google Sheets", type="primary"):
+# --- SAVE LOGIC (ARCHIVE LOST LEADS) ---
+st.divider()
+
+if st.button("💾 Save Changes (Move 'Lost' to Archive)", type="primary"):
     try:
-        if len(display_df) < len(df):
-             st.warning("⚠️ Saving filtered view. For full data safety, clear filters first.")
+        with st.spinner("Processing moves & saving..."):
+            # 1. Update master DF with edits
+            df.update(edited_view)
+            
+            # 2. Identify Rows to Move (Lost / Not Relevant)
+            rows_to_archive = df[df["Status"].isin(["Lost", "Not Relevant"])].copy()
+            rows_to_keep = df[~df["Status"].isin(["Lost", "Not Relevant"])].copy()
+            
+            # 3. Clean up columns for saving
+            # Ensure we only work with the official columns
+            rows_to_archive = rows_to_archive.drop(columns=["_sort_date"], errors="ignore")
+            rows_to_keep = rows_to_keep.drop(columns=["_sort_date"], errors="ignore")
+            
+            rows_to_archive = rows_to_archive[all_cols]
+            rows_to_keep = rows_to_keep[all_cols]
+            
+            # 4. Handle Archive Sheet
+            if not rows_to_archive.empty:
+                try:
+                    lost_sheet = main_doc_obj.worksheet("Lost_Leads")
+                except gspread.WorksheetNotFound:
+                    # Create if doesn't exist
+                    lost_sheet = main_doc_obj.add_worksheet(title="Lost_Leads", rows=1000, cols=20)
+                    lost_sheet.append_row(all_cols) # Add Headers
+                
+                # Append the lost rows to the archive tab
+                lost_sheet.append_rows(rows_to_archive.values.tolist())
+                st.toast(f"📦 Moved {len(rows_to_archive)} leads to 'Lost_Leads' tab.", icon="🗑️")
+            
+            # 5. Update Main Sheet (Overwrite with only kept rows)
+            sheet_obj.clear()
+            sheet_obj.update([rows_to_keep.columns.values.tolist()] + rows_to_keep.values.tolist())
         
-        sheet_obj.clear()
-        sheet_obj.append_row(edited_df.columns.tolist())
-        sheet_obj.append_rows(edited_df.values.tolist())
-        st.toast("✅ Updated!", icon="☁️")
-        time.sleep(1)
+        st.toast("✅ Active Database Updated!", icon="☁️")
+        time.sleep(2)
         st.rerun()
+            
     except Exception as e:
-        st.error(f"Save Failed: {e}")
+        st.error(f"❌ Save Failed: {e}")
