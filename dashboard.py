@@ -30,7 +30,6 @@ def get_gspread_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     
     # Option A: Local File
-    # (Matches the standard env var or defaults to current directory)
     creds_file = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "credentials.json")
     
     if os.path.exists(creds_file):
@@ -41,7 +40,6 @@ def get_gspread_client():
             pass # Fail silently and try option B
             
     # Option B: Streamlit Cloud Secrets
-    # (Used when deploying to share.streamlit.io)
     try:
         if "gcp_service_account" in st.secrets:
             key_dict = dict(st.secrets["gcp_service_account"])
@@ -59,7 +57,6 @@ def get_gspread_client():
 def load_data():
     """
     Connects to the Sheet and downloads data into a Pandas DataFrame.
-    Also fetches Sales Rep options if available.
     """
     client = get_gspread_client()
     if not client:
@@ -77,15 +74,8 @@ def load_data():
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
         
-        # Attempt to load Sales Reps from a 'Settings' tab (Optional feature)
-        try:
-            # Placeholder: If you add a settings tab later, uncomment this:
-            # settings_sheet = main_doc.worksheet("Settings")
-            # reps_list = settings_sheet.col_values(1)
-            # sales_reps_options = [x for x in reps_list if x and x != "Sales Reps"]
-            sales_reps_options = ["Dor", "Alon", "Unassigned"]
-        except gspread.WorksheetNotFound:
-            sales_reps_options = ["Dor", "Alon", "Unassigned"]
+        # Sales Reps Options
+        sales_reps_options = ["Dor", "Alon", "Unassigned"]
             
         return df, sheet, main_doc, sales_reps_options
     except Exception as e:
@@ -97,7 +87,6 @@ def parse_date(date_str):
     if not isinstance(date_str, str):
         return pd.NaT
     try:
-        # Clean string "Jan 01 2026" -> datetime object
         clean = date_str.replace(",", "").strip()
         return pd.to_datetime(clean, format="%b %d %Y", errors='coerce')
     except Exception:
@@ -110,12 +99,12 @@ def parse_date(date_str):
 # Load Data
 df, sheet_obj, main_doc_obj, sales_reps_options = load_data()
 
-# Define ALL columns (Critical for keeping structure when saving)
+# Define ALL columns (Includes new Follow-up columns)
 all_cols = [
     "Job Title", "Salary", "Post Date", "Contact Info", "Link", "Description", 
     "Status", "Sales Rep", "Notes", 
     "Send Mode", "Send Status", "Send Attempts", "Last Error", "Last Sent At",
-    "Draft Email", "Email Subject"
+    "Followup Count", "Draft Email", "Email Subject"
 ]
 
 # Ensure columns exist in DataFrame
@@ -127,12 +116,14 @@ for col in all_cols:
 df["Salary"] = df["Salary"].astype(str)
 df["Contact Info"] = df["Contact Info"].astype(str)
 df["Send Status"] = df["Send Status"].astype(str)
+# Ensure Count is treated as numeric or string, let's keep string for display safety
+df["Followup Count"] = df["Followup Count"].astype(str) 
 
 # Pre-processing for Sorting
 df["_sort_date"] = df["Post Date"].apply(parse_date)
 
-# Define CRM Status Options
-STATUS_OPTIONS = ["New", "In Progress", "Hot Lead", "Lost", "Not Relevant"]
+# --- UPDATED STATUS OPTIONS ---
+STATUS_OPTIONS = ["New", "Follow-up", "In Progress", "Hot Lead", "Lost", "Not Relevant"]
 
 # --- SIDEBAR FILTERS ---
 with st.sidebar:
@@ -180,7 +171,7 @@ else:
 c1, c2, c3, c4, c5 = st.columns(5)
 c1.metric("Active Leads", len(filtered_df))
 c2.metric("New Leads", len(df[df["Status"] == "New"]))
-c3.metric("Hot Leads 🔥", len(df[df["Status"] == "Hot Lead"]))
+c3.metric("Follow-ups ⏳", len(df[df["Status"] == "Follow-up"]))
 c4.metric("Sent ✉️", len(df[df["Send Status"] == "SENT"]))
 manual_count = len(df[df["Send Status"] == "MANUAL_CHECK"])
 c5.metric("Manual Check ✋", manual_count)
@@ -190,10 +181,10 @@ st.divider()
 # --- MAIN EDITOR TABLE ---
 st.info(f"💡 Showing {len(filtered_df)} leads. Edit values below and click 'Save'.")
 
-# Select specific columns to display in the UI
+# Select specific columns to display in the UI (Added Followup Count)
 display_columns = [
     "Job Title", "Salary", "Post Date", "Contact Info", "Link", 
-    "Description", "Status", "Sales Rep", "Notes", "Draft Email", "Send Status"
+    "Description", "Status", "Followup Count", "Sales Rep", "Notes", "Draft Email", "Send Status"
 ]
 
 # Render the Data Editor
@@ -211,6 +202,7 @@ edited_view = st.data_editor(
         "Contact Info": st.column_config.TextColumn("Contact Info", width="medium"),
         "Draft Email": st.column_config.TextColumn("Draft Email", width="large"),
         "Send Status": st.column_config.TextColumn("Send Status", disabled=True), 
+        "Followup Count": st.column_config.TextColumn("Retries", width="small", disabled=True),
     },
     hide_index=True
 )
