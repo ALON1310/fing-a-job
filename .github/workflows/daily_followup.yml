@@ -1,0 +1,29 @@
+name: Daily Follow-up Automation
+
+on:
+  schedule:
+    # 07:00 AM EST is 12:00 PM UTC
+    - cron: '0 12 * * *' 
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Follow-up Script
+        env:
+          # GitHub Secrets for security
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          SHEET: ${{ secrets.SHEET }}
+        run: python automation_manager.py

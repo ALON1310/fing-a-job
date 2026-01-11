@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """
-sender_agent.py (REFACTORED - Connected to utils.py)
-
-Logic remains identical, but helper functions are now imported from utils.py.
+sender_agent.py (UPDATED - Supports Follow-up Counting)
 """
 
 from __future__ import annotations
@@ -18,7 +16,7 @@ from typing import Dict, List, Tuple
 from dotenv import load_dotenv
 from sheets_client import get_sheet_client
 
-# --- NEW: Import shared tools ---
+# --- Import shared tools ---
 from utils import (
     setup_logging, 
     get_timestamp_iso, 
@@ -56,13 +54,10 @@ MAIL_BCC = os.getenv("MAIL_BCC", "").strip()
 
 
 # -------------------- LOGGING --------------------
-# Use the shared logging setup
 setup_logging()
 
 
 # -------------------- LOCAL HELPERS --------------------
-# (These remain here because they are specific to Sheets logic)
-
 def get_cell(row: List[str], headers: List[str], col: str) -> str:
     try:
         idx = headers.index(col)
@@ -155,8 +150,11 @@ def run_sender_agent() -> None:
     data_rows = all_values[1:]
     headers = list(headers_norm)
 
-    # Ensure tracking columns (Using UTILS function)
-    tracking_cols = ["Send Mode", "Send Status", "Send Attempts", "Last Error", "Last Sent At"]
+    # --- NEW: Ensure Followup Count exists ---
+    tracking_cols = [
+        "Send Mode", "Send Status", "Send Attempts", 
+        "Last Error", "Last Sent At", "Followup Count"
+    ]
     new_headers = ensure_columns(headers, tracking_cols)
 
     if new_headers != headers:
@@ -187,7 +185,7 @@ def run_sender_agent() -> None:
         # 1. Check existing Send Status
         send_status = get_cell(row, headers_norm, "Send Status").strip().upper()
         
-        # Skip if handled
+        # Skip if handled (SENT, SKIPPED, etc)
         if send_status in ("SENT", "SKIPPED", "MANUAL_CHECK", "PENDING"):
             if send_status == "PENDING" and MODE == "REAL":
                 pass 
@@ -195,13 +193,13 @@ def run_sender_agent() -> None:
                 continue
 
         # --- CRM SAFETY CHECK ---
+        # Allow sending if status is 'New' or empty.
         crm_status = get_cell(row, headers_norm, "Status").strip().lower()
         if crm_status not in ("", "new"):
             set_cell(row, headers_norm, "Send Status", "SKIPPED")
             set_cell(row, headers_norm, "Last Error", f"Skipped due to Status: {crm_status}")
             
             if not VERIFY_ONLY:
-                # Using UTILS colnum_to_a1
                 last_col = colnum_to_a1(len(headers_norm))
                 range_name = f"A{row_idx}:{last_col}{row_idx}"
                 batch_ranges.append({"range": range_name, "values": [row]})
@@ -212,8 +210,6 @@ def run_sender_agent() -> None:
             break
 
         contact_raw = get_cell(row, headers_norm, "Contact Info").strip()
-        
-        # Using UTILS extract_email
         to_email = extract_email(contact_raw)
         
         # --- LOGIC START ---
@@ -301,8 +297,20 @@ def run_sender_agent() -> None:
                         if ok:
                             set_cell(row, headers_norm, "Send Status", "SENT")
                             set_cell(row, headers_norm, "Last Error", "")
-                            # Using UTILS get_timestamp_iso
+                            
+                            # --- UPDATED FOLLOW-UP LOGIC ---
                             set_cell(row, headers_norm, "Last Sent At", get_timestamp_iso())
+                            
+                            # Increment Followup Count
+                            curr_count_str = get_cell(row, headers_norm, "Followup Count").strip()
+                            curr_count = int(curr_count_str) if curr_count_str.isdigit() else 0
+                            new_count = curr_count + 1
+                            set_cell(row, headers_norm, "Followup Count", str(new_count))
+                            
+                            # Set Status to 'Follow-up' to indicate active automation
+                            # (Unless it was already something else, but here we process New)
+                            set_cell(row, headers_norm, "Status", "Follow-up")
+
                             sent_count += 1
                             time.sleep(SLEEP_BETWEEN_SENDS_SEC)
                         else:

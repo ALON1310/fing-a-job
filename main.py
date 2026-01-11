@@ -40,27 +40,24 @@ def main():
         print("4. 📊  Dashboard (Launch UI)")
         print("-" * 30)
         print("5. 🚀  SEND REAL EMAILS (Real Mode)")
+        print("6. 🤖  RUN DAILY AUTOMATION (Follow-ups & Archive)")
         print("-" * 30)
         print("q. Quit")
         
         choice = input("\nSelect option: ").strip().lower()
 
         if choice == '1':
-            # Scraper runs independently
             run_script("scraper_agent.py")
 
         elif choice == '2':
-            # Set ENV for Dry Run dynamically
             os.environ["MODE"] = "DRYRUN"
             os.environ["VERIFY_ONLY"] = "0"
             run_script("sender_agent.py")
 
         elif choice == '3':
-            # Maintenance tool
             run_script("maintenance_tool.py")
 
         elif choice == '4':
-            # Launch Streamlit
             print("\n📊 Opening Dashboard...")
             try:
                 subprocess.run(["streamlit", "run", "dashboard.py"])
@@ -68,19 +65,20 @@ def main():
                 pass
 
         elif choice == '5':
-            # REAL SENDING - Safety Check
             print("\n⚠️  WARNING: YOU ARE ABOUT TO SEND REAL EMAILS! ⚠️")
             confirm = input("Type 'YES' to confirm: ")
             if confirm == "YES":
-                # Override ENV to REAL
                 os.environ["MODE"] = "REAL"
                 os.environ["VERIFY_ONLY"] = "0"
-                # We assume SEND_LIMIT is set in .env, or we could set it here too
-                # os.environ["SEND_LIMIT"] = "500" 
                 run_script("sender_agent.py")
             else:
                 print("❌ Cancelled.")
                 time.sleep(1)
+        
+        elif choice == '6':
+            print("\n🤖 Running Automation Manager...")
+            # שים לב: זה ירוץ לפי ההגדרות ב-.env שלך (REAL או DRYRUN)
+            run_script("automation_manager.py")
 
         elif choice == 'q':
             print("Bye! 👋")

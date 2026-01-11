@@ -9,6 +9,7 @@ import re
 import sys
 from datetime import datetime, timezone
 
+
 # --- 1. LOGGING SETUP ---
 def setup_logging():
     """Sets up the global logging configuration consistent across all agents."""
@@ -58,3 +59,18 @@ def ensure_columns(headers, required_headers):
         if c not in updated:
             updated.append(c)
     return updated
+def get_days_diff(date_str: str) -> int:
+    """
+    Calculates the number of days passed since a given date string.
+    Handles both ISO format (YYYY-MM-DDTHH:MM:SS) and simple (YYYY-MM-DD).
+    Returns 999 if the date is invalid or empty (to treat as 'long ago').
+    """
+    if not date_str:
+        return 999 
+    try:
+        # Clean the string (remove time if exists, take only YYYY-MM-DD)
+        clean_date = date_str.split("T")[0].split(" ")[0]
+        dt = datetime.strptime(clean_date, "%Y-%m-%d")
+        return (datetime.now() - dt).days
+    except Exception:
+        return 999
