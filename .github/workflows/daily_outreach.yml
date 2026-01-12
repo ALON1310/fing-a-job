@@ -1,0 +1,46 @@
+name: Daily Initial Outreach (Sender Agent)
+
+on:
+  # Schedule: Runs daily at 14:00 UTC (adjust time as needed)
+  schedule:
+    - cron: '0 14 * * *'
+  
+  # Manual trigger button (Allows running manually from GitHub Actions tab)
+  workflow_dispatch:
+
+jobs:
+  run-sender:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Sender Agent
+        env:
+          # --- Secrets (Cloud & Sheet Access) ---
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          SHEET: ${{ secrets.SHEET }}
+          
+          # --- SMTP / Email Details ---
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          
+          # --- Run Configuration ---
+          MODE: REAL          # MODE: REAL = Sends actual emails. Change to DRYRUN to test without sending.
+          SEND_LIMIT: 30      # Safety limit: Max emails to process in one run (prevents spamming).
+          
+        run: python sender_agent.py
