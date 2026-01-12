@@ -1,29 +1,46 @@
 name: Daily Follow-up Automation
 
 on:
+  # 1. Automatic schedule (Every day at 12:00 UTC / 07:00 AM EST)
   schedule:
-    # 07:00 AM EST is 12:00 PM UTC
-    - cron: '0 12 * * *' 
+    - cron: '0 12 * * *'
+  
+  # 2. Manual trigger button (Allows you to run it manually for testing)
+  workflow_dispatch:
 
 jobs:
-  build:
+  run-automation:
     runs-on: ubuntu-latest
+    
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
-      
+        uses: actions/checkout@v3
+
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
 
-      - name: Run Follow-up Script
+      - name: Run Automation Manager
         env:
-          # GitHub Secrets for security
+          # --- General Secrets ---
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
           SHEET: ${{ secrets.SHEET }}
+          
+          # --- SMTP Secrets (Required for sending emails) ---
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          
+          # --- Set Mode to REAL (Enables sending and updating DB) ---
+          MODE: REAL 
+          
         run: python automation_manager.py
