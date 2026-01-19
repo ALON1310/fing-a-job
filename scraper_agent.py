@@ -13,12 +13,19 @@ from sheets_client import get_sheet_client
 
 # --- NEW: Import shared tools ---
 from utils import setup_logging
+import salary_parser
+
 
 # -----------------------------
 # 1) CONFIGURATION
 # -----------------------------
 
+# ✅ FIX: Load .env BEFORE reading os.getenv values
 load_dotenv()
+
+MIN_MONTHLY_USD = float(os.getenv("MIN_MONTHLY_USD", "900"))
+MIN_MONTHLY_PHP = float(os.getenv("MIN_MONTHLY_PHP", "50000"))
+UNKNOWN_POLICY = os.getenv("UNKNOWN_SALARY_POLICY", "keep").strip().lower()
 
 # UPDATED: Matches your .env "SHEET"
 GOOGLE_SHEET_NAME = os.getenv("SHEET", "Master_Leads_DB")
@@ -30,10 +37,10 @@ DEBUG_SAVE_ALL = os.getenv("DEBUG_SAVE_ALL", "0").strip().lower() in ("1", "true
 # Logging options
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 
+
 # -----------------------------
 # 2) LOGGING SETUP
 # -----------------------------
-# Use the shared logging setup from utils.py
 setup_logging()
 
 
@@ -128,28 +135,6 @@ def save_to_google_sheets(new_leads: List[Dict[str, Any]]) -> None:
         logging.info(f"✅ Successfully uploaded {len(rows)} leads.")
     except Exception as e:
         logging.error(f"❌ Sheet Error: {e}")
-
-
-# -----------------------------
-# 5) SCRAPER & AI HELPERS
-# -----------------------------
-
-def is_salary_too_low(salary_str: str) -> bool:
-    if not salary_str:
-        return False
-    low = salary_str.lower()
-    if "negotiable" in low:
-        return False
-    clean = low.replace(",", "")
-    nums = re.findall(r"\d+(?:\.\d+)?", clean)
-    if not nums:
-        return False
-    val = max(float(n) for n in nums)
-    if "php" in clean or "₱" in clean:
-        val /= 58
-    if "hour" in clean or "hr" in clean:
-        return val < 5
-    return val < 500
 
 
 def normalize_contact(contact: object) -> str:
@@ -255,10 +240,9 @@ def run_job_seeker_agent() -> None:
             page.goto("https://www.onlinejobs.ph/login", timeout=60000)
 
             if page.locator("#login_username").count() > 0:
-                # UPDATED: Matches your .env "OJ_EMAIL" and "OJ_PASSWORD"
                 user = os.getenv("OJ_EMAIL")
                 pwd = os.getenv("OJ_PASSWORD")
-                
+
                 if not user or not pwd:
                     logging.error("❌ Missing OJ_EMAIL/OJ_PASSWORD in .env")
                     return
@@ -350,7 +334,13 @@ def run_job_seeker_agent() -> None:
                         if p2.locator("h1").count() > 0:
                             title = p2.locator("h1").first.inner_text() or "N/A"
 
-                        if is_salary_too_low(salary):
+                        # ✅ FIX: Use salary_parser module with thresholds + policy
+                        if salary_parser.is_salary_too_low(
+                            salary,
+                            MIN_MONTHLY_USD,
+                            MIN_MONTHLY_PHP,
+                            unknown_policy=UNKNOWN_POLICY,
+                        ):
                             logging.info("⛔ Salary too low -> skipped.")
                             p2.close()
                             continue
@@ -373,7 +363,7 @@ def run_job_seeker_agent() -> None:
                             role_name=title,
                             hook=str(ai_data.get("hook", "") or ""),
                         )
-                        
+
                         email_subject = f"Quick question about your {title} role"
 
                         batch.append({

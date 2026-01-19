@@ -4,7 +4,6 @@ import os
 import json
 
 from scraper_agent import (
-    is_salary_too_low,
     canonical_job_url,
     normalize_contact,
     has_real_contact,
@@ -12,6 +11,7 @@ from scraper_agent import (
     generate_email_body,
     run_job_seeker_agent
 )
+import salary_parser
 
 # ---------------------------------------------------------
 # Unit Tests
@@ -25,8 +25,8 @@ def test_canonical_job_url():
 
 def test_is_salary_too_low():
     """Verify salary filtering logic."""
-    assert is_salary_too_low("400/mo") is True   # Too low
-    assert is_salary_too_low("$1000") is False   # Acceptable
+    assert salary_parser.is_salary_too_low("400/mo", 900, 50000) is True
+    assert salary_parser.is_salary_too_low("$1000", 900, 50000) is False   # Acceptable
 
 def test_has_real_contact():
     """Verify contact info detection."""
