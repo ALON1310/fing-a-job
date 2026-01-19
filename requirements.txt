@@ -1,10 +1,21 @@
-streamlit
+# --- Core Logic ---
 pandas
 gspread
+google-auth
 oauth2client
 openpyxl
-playwright
-openai
 python-dotenv
+openai
+
+# --- Browser Automation ---
+playwright
+
+# --- UI / Dashboard ---
+streamlit
+
+# --- Utilities ---
 colorlog
-logging
+
+# --- Testing (Crucial for Dev) ---
+pytest
+pytest-mock
