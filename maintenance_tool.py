@@ -1,182 +1,275 @@
 #!/usr/bin/env python3
 """
-maintenance_tool.py (REFACTORED - Connected to utils.py)
+maintenance_tool.py (OPTIMIZED)
 
-Logic remains identical.
-- Uses shared logging from utils.py.
-- Maintains AI enrichment and Smart Reset logic.
+1. Deletes rows with no contact info.
+2. Fixes corrupted 'Followup Count' (removes text/drafts).
+3. Resets stuck statuses (PENDING/FAILED) so they can be retried.
+4. Enriches missing drafts using AI.
+
+Optimized to use Batch Updates to save API quotas.
 """
 
+from __future__ import annotations
+
+import logging
 import os
 import time
-import logging
-from dotenv import load_dotenv
-from sheets_client import get_sheet_client
-from scraper_agent import extract_data_with_ai, generate_email_body
+from typing import Any
 
-# --- NEW: Import shared tools ---
-from utils import setup_logging
+from dotenv import load_dotenv
+
+from scraper_agent import extract_data_with_ai, generate_email_body
+from sheets_client import get_sheet_client
+from utils import colnum_to_a1, setup_logging
 
 # --- CONFIGURATION ---
 load_dotenv()
-SHEET_NAME = os.getenv("SHEET", "Master_Leads_DB")  
+SHEET_NAME = os.getenv("SHEET", "Master_Leads_DB").strip()
 
-# --- LOGGING SETUP ---
-# Use the shared logging setup from utils.py
 setup_logging()
 
-def clean_and_enrich_db():
-    logging.info("🚀 STARTING MAINTENANCE AGENT (Smart Clean & Reset)")
+
+def clean_and_enrich_db() -> None:
+    logging.info("🚀 STARTING MAINTENANCE AGENT (Smart Clean, Fix & Enrich)")
     logging.info("------------------------------------------------")
-    
+
     try:
-        # 1. Connect
         client = get_sheet_client()
-        sheet = client.open(SHEET_NAME).sheet1
-        
-        logging.info("📥 Downloading sheet data...")
-        all_values = sheet.get_all_values()
-        
-        if len(all_values) < 2:
-            logging.warning("⚠️ Sheet is empty.")
-            return
-
-        headers = all_values[0]
-        
-        # 2. Map Columns
-        try:
-            col_map = {name.strip(): i for i, name in enumerate(headers)}
-            
-            # Data Columns
-            idx_contact = col_map["Contact Info"]
-            idx_desc = col_map["Description"]
-            idx_title = col_map["Job Title"]
-            idx_draft = col_map.get("Draft Email") 
-            idx_subject = col_map.get("Email Subject")
-            
-            # Status Columns
-            idx_status = col_map.get("Send Status")
-            idx_mode = col_map.get("Send Mode")
-            idx_error = col_map.get("Last Error")
-            idx_attempts = col_map.get("Send Attempts")
-
-            if idx_draft is None:
-                logging.error("❌ 'Draft Email' column missing.")
-                return
-
-        except KeyError as e:
-            logging.error(f"❌ Missing critical column: {e}")
-            return
-
+        ws = client.open(SHEET_NAME).sheet1
     except Exception as e:
         logging.error(f"❌ Connection error: {e}")
         return
 
-    logging.info(f"📚 Scanning {len(all_values) - 1} rows...")
-    logging.info("------------------------------------------------")
+    logging.info("📥 Downloading sheet data...")
+    try:
+        all_values = ws.get_all_values()
+    except Exception as e:
+        logging.error(f"❌ Failed to fetch sheet: {e}")
+        return
 
-    deleted_count = 0
-    updated_count = 0
-    cleaned_count = 0
-    skipped_protected_count = 0
+    if len(all_values) < 2:
+        logging.warning("⚠️ Sheet is empty.")
+        return
 
-    # 🔄 Loop Backwards
+    headers = all_values[0]
+
+    # ---------------------------------------------------------
+    # PHASE 1: COLUMN MAPPING
+    # ---------------------------------------------------------
+    def get_col_idx(name: str) -> int:
+        return headers.index(name) if name in headers else -1
+
+    idx_contact = get_col_idx("Contact Info")
+    idx_desc = get_col_idx("Description")
+    idx_title = get_col_idx("Job Title")
+    idx_draft = get_col_idx("Draft Email")
+    idx_subject = get_col_idx("Email Subject")
+
+    # Status & Tracking Columns
+    idx_status = get_col_idx("Status")
+    idx_send_status = get_col_idx("Send Status")
+    idx_mode = get_col_idx("Send Mode")
+    idx_error = get_col_idx("Last Error")
+    idx_attempts = get_col_idx("Send Attempts")
+    idx_followup = get_col_idx("Followup Count")
+
+    if idx_contact == -1:
+        logging.error("❌ 'Contact Info' column missing.")
+        return
+
+    # ---------------------------------------------------------
+    # PHASE 2: DELETION (Must be done first, backwards)
+    # ---------------------------------------------------------
+    rows_to_delete: list[int] = []
+
+    logging.info("🗑️ Phase 1: Checking for empty contacts...")
+
+    # Loop backwards so deletion doesn't mess up indices
     for i in reversed(range(1, len(all_values))):
         row_data = all_values[i]
-        actual_row_num = i + 1  
-        
-        # Safe Get Contact
-        contact_info = row_data[idx_contact].strip() if len(row_data) > idx_contact else ""
-        
-        # --- 1. DELETE LOGIC (Rows with no contact) ---
-        if not contact_info or contact_info.lower() == "none":
-            logging.info(f"🗑️  Row {actual_row_num}: DELETE -> No contact.")
-            try:
-                sheet.delete_rows(actual_row_num)
-                deleted_count += 1
-                time.sleep(1.5) 
-            except Exception as e:
-                logging.error(f"   ❌ Delete failed: {e}")
-                time.sleep(5)
-            continue 
+        actual_row_num = i + 1
 
-        # --- 2. ENRICH LOGIC (Fill missing drafts) ---
-        current_draft = row_data[idx_draft].strip() if len(row_data) > idx_draft else ""
-        
-        if not current_draft:
-            title = row_data[idx_title] if len(row_data) > idx_title else "Role"
-            description = row_data[idx_desc] if len(row_data) > idx_desc else ""
-            
-            logging.info(f"⚡ Row {actual_row_num}: GENERATING DRAFT -> '{title}'")
-            
-            if len(description) > 20:
+        contact_val = row_data[idx_contact].strip() if len(row_data) > idx_contact else ""
+
+        if (not contact_val) or (contact_val.lower() == "none"):
+            logging.info(f"   Row {actual_row_num}: Marking for DELETE (No contact)")
+            rows_to_delete.append(actual_row_num)
+
+    if rows_to_delete:
+        logging.info(f"⚡ Deleting {len(rows_to_delete)} rows...")
+        for row_num in rows_to_delete:
+            try:
+                ws.delete_rows(row_num)
+                time.sleep(1.0)  # Safety sleep
+            except Exception as e:
+                logging.error(f"   Delete failed: {e}")
+
+        logging.info("🔄 Re-fetching data after deletion...")
+        try:
+            all_values = ws.get_all_values()
+        except Exception as e:
+            logging.error(f"❌ Failed to re-fetch after deletion: {e}")
+            return
+
+        if len(all_values) < 2:
+            logging.warning("⚠️ Sheet became empty after deletions.")
+            return
+
+        # Refresh headers + indices after deletion (safe, even if unchanged)
+        headers = all_values[0]
+
+        def get_col_idx_refreshed(name: str) -> int:
+            return headers.index(name) if name in headers else -1
+
+        idx_desc = get_col_idx_refreshed("Description")
+        idx_title = get_col_idx_refreshed("Job Title")
+        idx_draft = get_col_idx_refreshed("Draft Email")
+        idx_subject = get_col_idx_refreshed("Email Subject")
+        idx_status = get_col_idx_refreshed("Status")
+        idx_send_status = get_col_idx_refreshed("Send Status")
+        idx_mode = get_col_idx_refreshed("Send Mode")
+        idx_error = get_col_idx_refreshed("Last Error")
+        idx_attempts = get_col_idx_refreshed("Send Attempts")
+        idx_followup = get_col_idx_refreshed("Followup Count")
+        idx_contact = get_col_idx_refreshed("Contact Info")
+
+    # ---------------------------------------------------------
+    # PHASE 3: REPAIRS & RESETS (Batch Operation)
+    # ---------------------------------------------------------
+    logging.info("🔧 Phase 2: Fixing Columns & Resetting Statuses...")
+
+    batch_updates: list[dict[str, Any]] = []
+
+    for i, row in enumerate(all_values):
+        if i == 0:
+            continue  # Skip header
+
+        row_num = i + 1
+
+        # A. FIX FOLLOWUP COUNT (The Bug Fix)
+        if idx_followup != -1 and len(row) > idx_followup:
+            val = row[idx_followup]
+            looks_corrupt = (
+                (len(val) > 5)
+                or ("@" in val)
+                or ("Hi " in val)
+                or (not val.isdigit())
+            )
+            if looks_corrupt:
+                current_status = row[idx_status] if (idx_status != -1 and len(row) > idx_status) else ""
+
+                # Logic: If lead is advanced, assume at least 1, else 0
+                new_val = "1" if current_status in ["Follow-up", "In Progress"] else "0"
+
+                logging.warning(
+                    f"   Row {row_num}: Fixing Followup Count ('{val[:10]}...' -> '{new_val}')"
+                )
+                cell_a1 = f"{colnum_to_a1(idx_followup + 1)}{row_num}"
+                batch_updates.append({"range": cell_a1, "values": [[new_val]]})
+
+        # B. SMART RESET (Clear PENDING/FAILED/ERROR)
+        # Only if NOT Sent/Skipped/Manual
+        status_val = ""
+        if idx_send_status != -1 and len(row) > idx_send_status:
+            status_val = row[idx_send_status]
+
+        if status_val not in ["SENT", "MANUAL_CHECK", "SKIPPED"]:
+            needs_clean = False
+
+            if idx_mode != -1 and len(row) > idx_mode and row[idx_mode]:
+                needs_clean = True
+            if idx_error != -1 and len(row) > idx_error and row[idx_error]:
+                needs_clean = True
+            if status_val:
+                needs_clean = True  # PENDING / FAILED / etc.
+
+            if needs_clean:
+                logging.info(f"   Row {row_num}: Resetting status for retry")
+
+                if idx_send_status != -1:
+                    batch_updates.append(
+                        {"range": f"{colnum_to_a1(idx_send_status + 1)}{row_num}", "values": [[""]]}
+                    )
+                if idx_mode != -1:
+                    batch_updates.append(
+                        {"range": f"{colnum_to_a1(idx_mode + 1)}{row_num}", "values": [[""]]}
+                    )
+                if idx_error != -1:
+                    batch_updates.append(
+                        {"range": f"{colnum_to_a1(idx_error + 1)}{row_num}", "values": [[""]]}
+                    )
+                if idx_attempts != -1:
+                    batch_updates.append(
+                        {"range": f"{colnum_to_a1(idx_attempts + 1)}{row_num}", "values": [["0"]]}
+                    )
+
+    if batch_updates:
+        logging.info(f"💾 Saving {len(batch_updates)} repairs/resets to Sheets...")
+        try:
+            chunk_size = 50
+            for k in range(0, len(batch_updates), chunk_size):
+                ws.batch_update(batch_updates[k : k + chunk_size])
+                time.sleep(1.0)
+            logging.info("✅ Batch update complete.")
+        except Exception as e:
+            logging.error(f"❌ Batch update failed: {e}")
+
+    # ---------------------------------------------------------
+    # PHASE 4: AI ENRICHMENT (Sequential / slow)
+    # ---------------------------------------------------------
+    if idx_draft == -1:
+        logging.info("🏁 Done (Skipping AI: No Draft Column)")
+        return
+
+    logging.info("🧠 Phase 3: AI Enrichment (Generating missing drafts)...")
+
+    try:
+        all_values = ws.get_all_values()
+    except Exception as e:
+        logging.error(f"❌ Failed to fetch before AI enrichment: {e}")
+        return
+
+    generated_count = 0
+
+    for i, row in enumerate(all_values):
+        if i == 0:
+            continue
+
+        row_num = i + 1
+        draft_val = row[idx_draft] if len(row) > idx_draft else ""
+
+        # Only generate if draft is EMPTY
+        if not draft_val:
+            title = row[idx_title] if (idx_title != -1 and len(row) > idx_title) else "Role"
+            desc = row[idx_desc] if (idx_desc != -1 and len(row) > idx_desc) else ""
+
+            if len(desc) > 20:
+                logging.info(f"   Row {row_num}: Generating AI Draft for '{title}'...")
                 try:
-                    # AI Analysis
-                    logging.info("   🧠 AI Generating Hook...")
-                    ai_data = extract_data_with_ai(description, title)
+                    ai_data = extract_data_with_ai(desc, title)
                     generated_hook = ai_data.get("hook", "")
-                    
-                    # Generate Email
+
                     new_draft = generate_email_body(
                         first_name=ai_data.get("name", "there"),
                         role_name=title,
-                        hook=generated_hook
+                        hook=generated_hook,
                     )
                     new_subject = f"Quick question about your {title} role"
-                    
-                    # Update Content
-                    sheet.update_cell(actual_row_num, idx_draft + 1, new_draft)
-                    if idx_subject is not None:
-                         sheet.update_cell(actual_row_num, idx_subject + 1, new_subject)
 
-                    updated_count += 1
-                    time.sleep(2.0) 
-                    
+                    ws.update_cell(row_num, idx_draft + 1, new_draft)
+                    if idx_subject != -1:
+                        ws.update_cell(row_num, idx_subject + 1, new_subject)
+
+                    generated_count += 1
+                    time.sleep(1.5)
                 except Exception as e:
-                    logging.error(f"   ⚠️ Error generating draft: {e}")
-                    time.sleep(5)
-
-        # --- 3. SMART RESET LOGIC (Protect SENT rows) ---
-        
-        curr_status = row_data[idx_status].strip() if idx_status and len(row_data) > idx_status else ""
-        curr_mode = row_data[idx_mode].strip() if idx_mode and len(row_data) > idx_mode else ""
-        curr_error = row_data[idx_error].strip() if idx_error and len(row_data) > idx_error else ""
-        curr_attempts = row_data[idx_attempts].strip() if idx_attempts and len(row_data) > idx_attempts else ""
-
-        if curr_status in ["SENT", "MANUAL_CHECK", "SKIPPED"]:
-            skipped_protected_count += 1
-            continue 
-
-
-        if curr_status or curr_mode or curr_error or (curr_attempts and curr_attempts != "0"):
-            logging.info(f"   🧹 Wiping status (Resetting for retry) for Row {actual_row_num}...")
-            try:
-                if idx_status is not None:
-                    sheet.update_cell(actual_row_num, idx_status + 1, "")
-                    time.sleep(0.8)
-                
-                if idx_mode is not None:
-                    sheet.update_cell(actual_row_num, idx_mode + 1, "")
-                    time.sleep(0.8)
-                
-                if idx_error is not None:
-                    sheet.update_cell(actual_row_num, idx_error + 1, "")
-                    time.sleep(0.8)
-                    
-                if idx_attempts is not None:
-                    sheet.update_cell(actual_row_num, idx_attempts + 1, "")
-                    time.sleep(0.8)
-                    
-                cleaned_count += 1
-            except Exception as e:
-                logging.error(f"   ❌ Failed to wipe row {actual_row_num}: {e}")
-                if "429" in str(e):
-                    logging.warning("   ⏳ Sleeping 30s due to rate limit...")
-                    time.sleep(30)
+                    logging.error(f"   ⚠️ Generation failed: {e}")
 
     logging.info("------------------------------------------------")
-    logging.info(f"🏁 DONE: Deleted {deleted_count} | Generated {updated_count} | Cleaned {cleaned_count} | Protected {skipped_protected_count}")
+    logging.info(f"🏁 MAINTENANCE COMPLETE. Generated {generated_count} new drafts.")
     logging.info("------------------------------------------------")
+
 
 if __name__ == "__main__":
     clean_and_enrich_db()
