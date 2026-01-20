@@ -3,25 +3,16 @@
 Salary parsing and filtering using a deterministic regex-based pipeline.
 
 Pipeline:
-1) Detect currency (USD/PHP) using regex.
-2) Detect time unit (hour/week/month/year) using regex.
-3) Extract 1-2 numbers using regex normalization:
-   - Replace anything that is NOT digit / comma / dot with a space.
-   - Collapse spaces.
-   - Split and parse numbers (commas removed).
-4) Store extracted facts and decide if salary is too low using currency-specific thresholds.
+1) Normalize text to lowercase.
+2) Detect currency (USD/PHP) using regex.
+3) Detect time unit (hour/week/month/year) using regex.
+4) Extract numbers.
+5) Logic/Inference for unknown currencies.
 
-NEW (your requested behavior):
-- If currency is unknown but we have numbers:
-  1) <100           -> treat as USD/hour
-  2) 100..400       -> treat as USD/week
-  3) 400..4000      -> treat as USD/month
-  4) 15000..100000  -> treat as PHP/month  (common PH monthly range)
-  else              -> "throw away" (filter out)
-
-Upgrades requested now:
-- Currency detection: detect "3,000USD" (USD attached to digits) as USD.
-- Number extraction: support decimals like "$1.50 USD/HR" -> [1.5].
+Updates:
+- All regexes are now lowercase only (we convert input to .lower() first).
+- Added support for 'h' (hour) and 'm' (month).
+- Supports decimal extraction.
 """
 
 from __future__ import annotations
@@ -40,21 +31,20 @@ WEEKS_PER_MONTH = 4.33       # ~4.33 weeks/month
 
 # ---------------------------------------------------------------------
 # Regex patterns: currency detection (USD/PHP)
+# All patterns are LOWERCASE. Input is converted to lower() before matching.
 # ---------------------------------------------------------------------
 
-# NOTE:
-# We want to detect "USD" even when it's attached to digits like "3000USD".
-# Using (?<![A-Za-z])USD(?![A-Za-z]) allows digits/commas before USD, but blocks letters.
-_USD_TOKEN = r"(?<![A-Za-z])usd(?![A-Za-z])"
+# Lookbehind/Lookahead for 'usd' to ensure it's not part of another word (like "used")
+_USD_TOKEN = r"(?<![a-z])usd(?![a-z])"
 
 CURRENCY_PATTERNS: Dict[str, re.Pattern] = {
     "php": re.compile(
         r"(?:\bphp\b|₱|\bpeso\b|\bpesos\b|\bphilippine\s+peso\b)",
-        re.IGNORECASE,
     ),
     "usd": re.compile(
-        rf"(?:\$\s*|{_USD_TOKEN}|\bu\.s\.d\b|\bus\$\b|\bdollar\b|\bdollars\b)",
-        re.IGNORECASE,
+        # Matches: $, usd, u.s.d, us$, dollar(s)
+        # Also matches "us" if attached to digits (50us) or word boundary (us)
+        rf"(?:\$\s*|{_USD_TOKEN}|\bu\.s\.d\b|\bus\$\b|\bdollar\b|\bdollars\b|\b\d*us\b)",
     ),
 }
 
@@ -62,140 +52,99 @@ CURRENCY_PATTERNS: Dict[str, re.Pattern] = {
 def detect_currency(text: str) -> str:
     """
     Detect currency using regex only.
-
-    Args:
-        text: Raw salary text.
-
-    Returns:
-        'php', 'usd', or 'unknown'
+    Converts text to lowercase first.
     """
     if not text:
         return "unknown"
+    
+    # FORCE LOWERCASE
+    t = text.lower()
 
-    # Prefer explicit PHP markers first (avoid '$' catching PHP strings that also include '$')
-    if CURRENCY_PATTERNS["php"].search(text):
+    if CURRENCY_PATTERNS["php"].search(t):
         return "php"
-    if CURRENCY_PATTERNS["usd"].search(text):
+    if CURRENCY_PATTERNS["usd"].search(t):
         return "usd"
     return "unknown"
 
 
 # ---------------------------------------------------------------------
 # Regex patterns: unit detection (hour/week/month/year)
-# FIX: allow spaces after '/', include plain "week/month/year" tokens too
+# Updated to support 'h' and 'm'
 # ---------------------------------------------------------------------
 
 UNIT_PATTERNS: Dict[str, re.Pattern] = {
-    "hour": re.compile(r"(?:per\s*hour|/\s*hour|\bhourly\b|/\s*hr\b|\bhr\b)", re.IGNORECASE),
-    "week": re.compile(r"(?:per\s*week|/\s*week|\bweekly\b|/\s*wk\b|\bwk\b|\bweek\b)", re.IGNORECASE),
-    "month": re.compile(r"(?:per\s*month|/\s*month|\bmonthly\b|/\s*mo\b|\bmo\b|\bmonth\b)", re.IGNORECASE),
-    "year": re.compile(r"(?:per\s*year|/\s*year|\byearly\b|\bannual\b|\bannually\b|\byear\b)", re.IGNORECASE),
+    "hour": re.compile(
+        # Matches: per hour, /hour, hourly, /hr, hr, /h, per h, or explicit 'h' at boundary
+        r"(?:per\s*hour|/\s*hour|\bhourly\b|/\s*hr\b|\bhr\b|/\s*h\b|\bh\b)", 
+    ),
+    "week": re.compile(
+        r"(?:per\s*week|/\s*week|\bweekly\b|/\s*wk\b|\bwk\b|\bweek\b|/\s*w\b|\bw\b)", 
+    ),
+    "month": re.compile(
+        # Matches: per month, /month, monthly, /mo, mo, /m, per m, pr mo
+        r"(?:per\s*month|/\s*month|\bmonthly\b|/\s*mo\b|\bmo\b|\bmonth\b|pr\s*mo|/\s*m\b|\bm\b)", 
+    ),
+    "year": re.compile(
+        r"(?:per\s*year|/\s*year|\byearly\b|\bannual\b|\bannually\b|\byear\b|/\s*y\b|\by\b)", 
+    ),
 }
 
-OVER_PATTERN = re.compile(r"(?:\bover\b|\bat\s*least\b|\bfrom\b|\bminimum\b|\bmin\b)", re.IGNORECASE)
-UPTO_PATTERN = re.compile(r"(?:\bup\s*to\b|\bupto\b|\bmaximum\b|\bmax\b|\bno\s+more\s+than\b)", re.IGNORECASE)
+OVER_PATTERN = re.compile(r"(?:\bover\b|\bat\s*least\b|\bfrom\b|\bminimum\b|\bmin\b)")
+UPTO_PATTERN = re.compile(r"(?:\bup\s*to\b|\bupto\b|\bmaximum\b|\bmax\b|\bno\s+more\s+than\b)")
 
 
 def detect_unit(text: str) -> str:
     """
     Detect time unit using regex only.
-
-    Args:
-        text: Raw salary text.
-
-    Returns:
-        'hour', 'week', 'month', 'year', or 'unknown'
+    Converts text to lowercase first.
     """
     if not text:
         return "unknown"
+    
+    # FORCE LOWERCASE
+    t = text.lower()
 
     for unit, pattern in UNIT_PATTERNS.items():
-        if pattern.search(text):
+        if pattern.search(t):
             return unit
     return "unknown"
 
 
 # ---------------------------------------------------------------------
-# Number extraction (now supports decimals)
+# Number extraction
 # ---------------------------------------------------------------------
 
-# Keep digits, commas and dot (decimal point). Everything else becomes a space.
 _NON_DIGIT_COMMA_DOT = re.compile(r"[^\d,\.]+")
 _MULTI_SPACES = re.compile(r"\s+")
 
 
 def normalize_for_numbers(text: str) -> str:
-    """
-    Keep digits, commas, and '.' only; everything else becomes a space.
-    Then collapse multiple spaces.
-
-    Examples:
-        "$900-$1,000/month" -> "900 1,000"
-        "Php 15,000" -> "15,000"
-        "$1.50 USD/HR" -> "1.50"
-        "Up to 3,000USD/month" -> "3,000"
-
-    Args:
-        text: Raw text
-
-    Returns:
-        A cleaned string containing numeric chunks separated by single spaces.
-    """
     if not text:
         return ""
+    
+    # We don't strictly need lower() for digits, but consistent is good
+    t = text.lower() 
 
-    cleaned = _NON_DIGIT_COMMA_DOT.sub(" ", text)
+    cleaned = _NON_DIGIT_COMMA_DOT.sub(" ", t)
     cleaned = _MULTI_SPACES.sub(" ", cleaned).strip()
     return cleaned
 
 
 def _is_valid_number_token(token: str) -> bool:
-    """
-    Validate a numeric token after normalization.
-
-    We allow:
-      - digits
-      - commas (thousands separators)
-      - at most one dot
-
-    Reject tokens like:
-      - "." or ","
-      - "1..2"
-      - "1,2,3.4.5"
-    """
     if not token:
         return False
-
     # Must contain at least one digit
     if not any(ch.isdigit() for ch in token):
         return False
-
     # At most one dot
     if token.count(".") > 1:
         return False
-
     # Token should not be only punctuation
     stripped = token.replace(",", "").replace(".", "")
     return stripped.isdigit()
 
 
 def extract_numbers(text: str, max_numbers: int = 2) -> List[float]:
-    """
-    Extract up to `max_numbers` numeric values from text.
-
-    Steps:
-    1) Replace any non-digit/non-comma/non-dot chars with spaces
-    2) Collapse spaces
-    3) Split
-    4) Parse floats after removing commas
-
-    Args:
-        text: Raw salary text
-        max_numbers: Max amount of numbers to return (default 2)
-
-    Returns:
-        List of floats (length 0..max_numbers)
-    """
     cleaned = normalize_for_numbers(text)
     if not cleaned:
         return []
@@ -207,7 +156,6 @@ def extract_numbers(text: str, max_numbers: int = 2) -> List[float]:
         if not _is_valid_number_token(part):
             continue
 
-        # Remove commas: "1,000.50" -> "1000.50"
         part_no_commas = part.replace(",", "")
         try:
             nums.append(float(part_no_commas))
@@ -221,21 +169,11 @@ def extract_numbers(text: str, max_numbers: int = 2) -> List[float]:
 
 
 # ---------------------------------------------------------------------
-# Salary facts
+# Salary facts & Inference
 # ---------------------------------------------------------------------
 
 @dataclass
 class SalaryFacts:
-    """
-    Facts extracted from a salary string.
-
-    - currency: 'usd', 'php', or 'unknown'
-    - unit: 'hour', 'week', 'month', 'year', or 'unknown'
-    - low_raw/high_raw: numeric bounds in the detected unit (not monthly yet)
-    - low_monthly/high_monthly: numeric bounds converted to monthly if possible
-    - has_over/has_upto: whether text suggests "over" or "up to"
-    - raw: original salary text (for debugging/logging)
-    """
     currency: str
     unit: str
     low_raw: Optional[float]
@@ -248,12 +186,8 @@ class SalaryFacts:
 
 
 def _convert_to_monthly(value: Optional[float], unit: str) -> Optional[float]:
-    """
-    Convert a numeric value to a monthly value given a unit.
-    """
     if value is None:
         return None
-
     if unit == "hour":
         return value * HOURS_PER_MONTH
     if unit == "week":
@@ -266,10 +200,6 @@ def _convert_to_monthly(value: Optional[float], unit: str) -> Optional[float]:
 
 
 def _representative_value(low_raw: Optional[float], high_raw: Optional[float]) -> Optional[float]:
-    """
-    Pick a single value for inference heuristics:
-    - prefer low if exists; else use high
-    """
     return low_raw if low_raw is not None else high_raw
 
 
@@ -279,15 +209,6 @@ def _infer_unknown_currency_and_unit(
     low_raw: Optional[float],
     high_raw: Optional[float],
 ) -> Tuple[str, str]:
-    """
-    Your requested behavior:
-    - If currency unknown, infer by magnitude:
-      <100           -> USD/hour
-      100..400       -> USD/week
-      400..4000      -> USD/month
-      15000..100000  -> PHP/month
-      else           -> remain unknown (caller will "throw away")
-    """
     if currency != "unknown":
         return currency, unit
 
@@ -295,7 +216,7 @@ def _infer_unknown_currency_and_unit(
     if v is None:
         return currency, unit
 
-    # PH monthly typical range (even if no PHP marker)
+    # PH monthly typical range
     if 15000 <= v <= 100000:
         return "php", ("month" if unit == "unknown" else unit)
 
@@ -311,10 +232,9 @@ def _infer_unknown_currency_and_unit(
 
 
 def build_salary_facts(raw: str) -> SalaryFacts:
-    """
-    Build SalaryFacts using the pipeline + your inference rules for unknown currency.
-    """
-    text = raw or ""
+    # FORCE LOWERCASE for patterns
+    text = (raw or "").lower()
+    
     currency = detect_currency(text)
     unit = detect_unit(text)
 
@@ -339,7 +259,6 @@ def build_salary_facts(raw: str) -> SalaryFacts:
     else:
         low_raw, high_raw = min(nums[0], nums[1]), max(nums[0], nums[1])
 
-    # Infer unknown currency/unit by your rules
     currency, unit = _infer_unknown_currency_and_unit(currency, unit, low_raw, high_raw)
 
     low_monthly = _convert_to_monthly(low_raw, unit)
@@ -368,31 +287,19 @@ def is_salary_too_low(
     min_monthly_php: float,
     unknown_policy: str = "keep",
 ) -> bool:
-    """
-    Decide whether a job should be filtered out due to low salary.
-
-    Key behavior:
-    - If currency still unknown after inference: ALWAYS filter out (throw away).
-    - Otherwise compare monthly salary against the currency-specific threshold.
-    - If monthly conversion isn't possible, fall back to unknown_policy.
-    """
     facts = build_salary_facts(raw)
 
-    # If still unknown after inference -> throw away
     if facts.currency not in ("usd", "php"):
-        return True
+        return True # Throw away unknown currency
 
-    # If we still can't compare (no monthly numbers), fall back to policy
     if facts.low_monthly is None and facts.high_monthly is None:
         return unknown_policy == "skip"
 
     min_required = min_monthly_usd if facts.currency == "usd" else min_monthly_php
 
-    # Lower bound check (conservative)
     if facts.low_monthly is not None and facts.low_monthly < min_required:
         return True
 
-    # Upper bound only ("up to")
     if facts.low_monthly is None and facts.high_monthly is not None and facts.high_monthly < min_required:
         return True
 

@@ -92,8 +92,11 @@ def test_run_sender_agent_real_mode(mock_env):
         "Status", "Contact Info", "Draft Email", "Email Subject", 
         "Send Status", "Followup Count", "Last Sent At", "Send Mode", "Send Attempts", "Last Error"
     ]
-    # Row representing a new lead
-    row_data = ["New", "alon@test.com", "Hi body", "Subject", "", "0", "", "", "", ""]
+    
+    # UPDATE: We create a "Valid" draft that passes the 200 char limit AND contains "At Platonics"
+    valid_draft = "Hi Alon, " + ("This is a very long draft text used to satisfy the length requirement of 200 characters in the sender agent validation logic. " * 5) + "\n\nBest regards,\nAt Platonics"
+    
+    row_data = ["New", "alon@test.com", valid_draft, "Subject", "", "0", "", "", "", ""]
     
     ws.get_all_values.return_value = [headers, row_data]
 
@@ -130,7 +133,11 @@ def test_run_sender_agent_dry_run(mock_env):
     smtp = mocks["smtp"]
 
     headers = ["Status", "Contact Info", "Draft Email", "Email Subject", "Send Status", "Followup Count", "Last Sent At", "Send Mode", "Send Attempts", "Last Error"]
-    row_data = ["New", "alon@test.com", "Hi body", "Subject", "", "0", "", "", "", ""]
+    
+    # UPDATE: Use the valid draft here too
+    valid_draft = "Hi Alon, " + ("This is a very long draft text used to satisfy the length requirement of 200 characters in the sender agent validation logic. " * 5) + "\n\nBest regards,\nAt Platonics"
+    row_data = ["New", "alon@test.com", valid_draft, "Subject", "", "0", "", "", "", ""]
+    
     ws.get_all_values.return_value = [headers, row_data]
 
     # Run in DRYRUN mode
