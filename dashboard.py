@@ -7,8 +7,6 @@ from dotenv import load_dotenv
 
 # --- IMPORTS FROM CENTRAL CLIENT ---
 from sheets_client import get_sheet_client
-import streamlit as st
-import os
 
 # --- 🕵️‍♂️ DEBUG START ---
 st.title("🔍 Secrets Debugger")
