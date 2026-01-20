@@ -20,21 +20,25 @@ def get_sheet_client():
 
     # --- OPTION A: STREAMLIT SECRETS (Cloud) ---
     # Checks if running on Streamlit Cloud with configured secrets
-    if "GCP_SERVICE_ACCOUNT" in st.secrets:
-        try:
-            # Convert Streamlit's internal object to a standard dictionary
-            creds_dict = dict(st.secrets["GCP_SERVICE_ACCOUNT"])
+    # We wrap this in a try-except block because accessing st.secrets 
+    # locally without a secrets.toml file causes a crash.
+    try:
+        if "GCP_SERVICE_ACCOUNT" in st.secrets:
+            try:
+                # Convert Streamlit's internal object to a standard dictionary
+                creds_dict = dict(st.secrets["GCP_SERVICE_ACCOUNT"])
 
-            # CRITICAL FIX: Handle escaped newlines in the private key
-            # This fixes the common copy-paste issue in Streamlit Secrets
-            if "private_key" in creds_dict:
-                creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+                # CRITICAL FIX: Handle escaped newlines in the private key
+                if "private_key" in creds_dict:
+                    creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
 
-            creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-            return gspread.authorize(creds)
-        except Exception as e:
-            # Log error but allow falling back to other methods if needed
-            print(f"⚠️ Error loading Streamlit Secrets: {e}")
+                creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+                return gspread.authorize(creds)
+            except Exception as e:
+                print(f"⚠️ Found secrets but failed to load: {e}")
+    except (FileNotFoundError, KeyError, Exception):
+        # This catches the "No secrets found" error locally so we can proceed to Option B/C
+        pass
 
     # --- OPTION B: ENVIRONMENT VARIABLE (GitHub Actions) ---
     # Checks for a raw JSON string injected via environment variable
