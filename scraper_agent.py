@@ -9,6 +9,7 @@ from typing import Dict, Any, Set, List, Callable, Tuple, Optional
 from dotenv import load_dotenv
 from openai import OpenAI
 from playwright.sync_api import sync_playwright
+from schedule import logger
 from sheets_client import get_sheet_client
 
 # --- NEW: Import shared tools ---
@@ -264,16 +265,14 @@ def run_job_seeker_agent() -> None:
 
             # 2) NAVIGATION
             logging.info("Step 2: Navigating to Job Board...")
+            search_url = "https://www.onlinejobs.ph/jobseekers/jobsearch"
+            page.goto(search_url, timeout=60000)
+            
             try:
-                page.locator('a[href="https://www.onlinejobs.ph/jobs"]').first.click()
-                page.wait_for_load_state("domcontentloaded")
-                time.sleep(2)
-                page.locator('a[href="/jobseekers/jobsearch"]').first.click()
-                page.wait_for_load_state("domcontentloaded")
-                time.sleep(2)
-            except Exception as e:
-                logging.error(f"❌ Nav Failed: {e}")
-                return
+                page.wait_for_selector(".jobpost-cat-box, .job-post-snippet", timeout=20000)
+                logger.info("✅ Landed on Job Search page successfully.")
+            except Exception:
+                logger.warning("⚠️ Might not be on the search page yet, attempting to force search...")
 
             # 3) SCANNING LOOP
             batch: List[Dict[str, Any]] = []
@@ -327,8 +326,16 @@ def run_job_seeker_agent() -> None:
                         desc = p2.locator("#job-description").inner_text() or ""
 
                         salary = "N/A"
-                        if p2.locator("dl > dd > p").count() > 0:
-                            salary = p2.locator("dl > dd > p").first.inner_text() or "N/A"
+                        salary_el = p2.locator("dt:has-text('Salary') + dd")
+                        
+                        if salary_el.count() > 0:
+                            salary = salary_el.first.inner_text().strip()
+                        
+                        elif p2.locator("div:nth-child(2) > dl > dd > p").count() > 0:
+                            salary = p2.locator("div:nth-child(2) > dl > dd > p").first.inner_text().strip()
+
+                        logging.info(f"   💰 Raw Salary Found: '{salary}'")
+
 
                         title = "N/A"
                         if p2.locator("h1").count() > 0:
