@@ -117,8 +117,10 @@ def test_dry_run_does_nothing(mock_dependencies):
     mocks["ws"].get_all_records.return_value = fake_data
     mocks["days_diff"].return_value = 10 # Should send if REAL
 
-    # No need to patch MODE here; default is DRYRUN
-    process_daily_automation()
+    # CRITICAL FIX: Explicitly patch MODE to DRYRUN. 
+    # This overrides your local .env (where MODE=REAL) for this specific test.
+    with patch("automation_manager.MODE", "DRYRUN"):
+        process_daily_automation()
 
     # Verify strict inaction
     mocks["send"].assert_not_called()
