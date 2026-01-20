@@ -7,7 +7,39 @@ from dotenv import load_dotenv
 
 # --- IMPORTS FROM CENTRAL CLIENT ---
 from sheets_client import get_sheet_client
+import streamlit as st
+import os
 
+# --- 🕵️‍♂️ DEBUG START ---
+st.title("🔍 Secrets Debugger")
+
+# 1. בדיקה האם Streamlit מזהה סודות בכלל
+try:
+    secrets_keys = list(st.secrets.keys())
+    st.write(f"📂 Available Secret Sections: `{secrets_keys}`")
+    
+    # 2. בדיקה ספציפית לסקשן שלנו
+    if "GCP_SERVICE_ACCOUNT" in st.secrets:
+        st.success("✅ Found [GCP_SERVICE_ACCOUNT] section!")
+        inner_keys = list(st.secrets["GCP_SERVICE_ACCOUNT"].keys())
+        st.write(f"🔑 Keys inside: `{inner_keys}`")
+        
+        # 3. בדיקה קריטית - האם ה-Private Key נראה תקין?
+        pk = st.secrets["GCP_SERVICE_ACCOUNT"].get("private_key", "")
+        if "-----BEGIN PRIVATE KEY-----" in pk:
+            st.success("✅ Private Key structure looks valid.")
+        else:
+            st.error("❌ Private Key is missing or malformed!")
+    else:
+        st.error("❌ [GCP_SERVICE_ACCOUNT] section is MISSING in secrets!")
+
+except FileNotFoundError:
+    st.error("❌ No secrets file found at all.")
+except Exception as e:
+    st.error(f"❌ Error reading secrets: {e}")
+
+st.divider()
+# --- 🕵️‍♂️ DEBUG END ---
 # ---------------------------------------------------------
 # 1. CONFIGURATION & SETUP
 # ---------------------------------------------------------
