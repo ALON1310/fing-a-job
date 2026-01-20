@@ -1,0 +1,43 @@
+name: Daily Summary Email
+
+on:
+  # 1. Automatic Schedule: Runs daily at 18:00 UTC
+  # (Ensure this is after the Scraper and Sender execution times)
+  schedule:
+    - cron: '0 18 * * *'
+  
+  # 2. Manual Trigger Button (For testing purposes)
+  workflow_dispatch:
+
+jobs:
+  send-summary:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Summary Agent
+        env:
+          # --- Secrets (Sheet & Cloud Access) ---
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          SHEET: ${{ secrets.SHEET }}
+          
+          # --- SMTP Secrets (For sending email) ---
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          
+        run: python daily_summary.py

@@ -3,7 +3,7 @@ import sys
 import subprocess
 import time
 from dotenv import load_dotenv
-
+from daily_summary import send_daily_summary
 # Load default env vars (just in case)
 load_dotenv()
 
@@ -41,6 +41,7 @@ def main():
         print("-" * 30)
         print("5. 🚀  SEND REAL EMAILS (Real Mode)")
         print("6. 🤖  RUN DAILY AUTOMATION (Follow-ups & Archive)")
+        print("7. 📢 Send Daily Summary Email")
         print("-" * 30)
         print("q. Quit")
         
@@ -79,6 +80,10 @@ def main():
             print("\n🤖 Running Automation Manager...")
             # שים לב: זה ירוץ לפי ההגדרות ב-.env שלך (REAL או DRYRUN)
             run_script("automation_manager.py")
+            
+        elif choice == '7':
+            send_daily_summary()
+            input("\nPress Enter to continue...")
 
         elif choice == 'q':
             print("Bye! 👋")
