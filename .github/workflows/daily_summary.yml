@@ -1,16 +1,19 @@
 name: Daily Summary Email
 
 on:
-  # 1. Automatic Schedule: Runs daily at 18:00 UTC
-  # (Ensure this is after the Scraper and Sender execution times)
-  schedule:
-    - cron: '0 18 * * *'
+  # 1. Trigger: Runs immediately after "Daily Initial Outreach (Sender Agent)" completes
+  workflow_run:
+    workflows: ["Daily Initial Outreach (Sender Agent)"] # חייב להיות זהה לשם בקובץ השולח
+    types:
+      - completed
   
   # 2. Manual Trigger Button (For testing purposes)
   workflow_dispatch:
 
 jobs:
   send-summary:
+    # Run only if the sender agent actually succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     
     steps:
