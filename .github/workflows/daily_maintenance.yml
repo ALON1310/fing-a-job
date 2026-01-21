@@ -1,0 +1,39 @@
+name: Daily Maintenance & AI Enrichment
+
+on:
+  # 1. Automatic Schedule: Runs daily at 13:00 UTC
+  # (Runs AFTER the Scraper (10:00) and BEFORE the Sender (14:00))
+  schedule:
+    - cron: '0 13 * * *'
+  
+  # 2. Manual Trigger Button (For testing)
+  workflow_dispatch:
+
+jobs:
+  run-maintenance:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Maintenance Tool
+        env:
+          # --- Secrets (Sheet & Cloud Access) ---
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          SHEET: ${{ secrets.SHEET }}
+          
+          # --- AI Secret (Crucial for generating Draft Emails) ---
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          
+        run: python maintenance_tool.py
