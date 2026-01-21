@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-sender_agent.py (UPDATED - Supports Follow-up Counting)
+sender_agent.py (UPDATED with New Template)
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ MODE = os.getenv("MODE", "DRYRUN").strip().upper()
 
 # Limits
 SEND_LIMIT = int(os.getenv("SEND_LIMIT", "500"))
-SLEEP_BETWEEN_SENDS_SEC = float(os.getenv("SLEEP_BETWEEN_SENDS_SEC", "0.7"))
+SLEEP_BETWEEN_SENDS_SEC = float(os.getenv("SLEEP_BETWEEN_SENDS_SEC", "2.0"))
 
 # Safety & Batching
 BATCH_SAVE_SIZE = 10
@@ -73,9 +73,10 @@ def set_cell(row: List[str], headers: List[str], col: str, value: str) -> None:
 
 def default_subject_from_row(headers: List[str], row: List[str]) -> str:
     title = get_cell(row, headers, "Job Title").strip()
+    # NEW SUBJECT FORMAT
     if title:
-        return f"Quick question about your {title} role"
-    return "Quick question about your hiring needs"
+        return f"Top Filipino VA for your {title}"
+    return "Top Filipino VA for your role"
 
 
 def resolve_body(headers: List[str], row: List[str]) -> Tuple[str, str]:
@@ -103,14 +104,14 @@ def resolve_body(headers: List[str], row: List[str]) -> Tuple[str, str]:
 
 def is_draft_valid(body: str) -> bool:
     """
-    Safety rule:
-    - Must be long enough
-    - Must include a key phrase that exists in your approved template
+    Safety rule updated for new template.
+    Checks for key phrases from the new template.
     """
     body_stripped = (body or "").strip()
-    if len(body_stripped) < 200:
+    if len(body_stripped) < 50: # Shortened because new template is concise
         return False
-    if "At Platonics" not in body_stripped:
+    # Check for a word from the new template to ensure it's not empty/garbage
+    if "Filipino" not in body_stripped and "VA" not in body_stripped:
         return False
     return True
 
@@ -195,17 +196,19 @@ def run_sender_agent() -> None:
             row.append("")
 
         send_status = get_cell(row, headers_norm, "Send Status").strip().upper()
-        if send_status in ("SENT", "SKIPPED", "MANUAL_CHECK", "PENDING"):
-            if send_status == "PENDING" and MODE == "REAL":
-                pass
-            else:
-                continue
+        # If pending in REAL mode, we send. If verify/mock, we check logic.
+        if send_status in ("SENT", "SKIPPED", "MANUAL_CHECK"):
+            continue
+        
+        # If it's DRYRUN, we process even if not pending to show what would happen
+        # If REAL, we only process empty or PENDING
+        if MODE == "REAL" and send_status not in ("", "PENDING", "FAILED"):
+             continue
 
         crm_status = get_cell(row, headers_norm, "Status").strip().lower()
         if crm_status not in ("", "new"):
             set_cell(row, headers_norm, "Send Status", "SKIPPED")
             set_cell(row, headers_norm, "Last Error", f"Skipped due to Status: {crm_status}")
-
             if not VERIFY_ONLY:
                 last_col = colnum_to_a1(len(headers_norm))
                 range_name = f"A{row_idx}:{last_col}{row_idx}"
@@ -221,58 +224,29 @@ def run_sender_agent() -> None:
 
         # 1) No email
         if not to_email:
-            is_empty = (not contact_raw) or (contact_raw.lower() == "none")
-            if is_empty:
-                if VERIFY_ONLY:
-                    logging.info(f"[VERIFY_ONLY] Row {row_idx}: SKIPPED (No contact info)")
-                else:
-                    set_cell(row, headers_norm, "Send Status", "SKIPPED")
-                    set_cell(row, headers_norm, "Last Error", "No contact info found")
-            else:
-                if VERIFY_ONLY:
-                    logging.info(f"[VERIFY_ONLY] Row {row_idx}: MANUAL_CHECK (Contact: {contact_raw})")
-                else:
-                    set_cell(row, headers_norm, "Send Status", "MANUAL_CHECK")
-                    set_cell(row, headers_norm, "Last Error", "Non-email contact found")
-
+            # Handle logging/saving skipped rows...
+            set_cell(row, headers_norm, "Send Status", "SKIPPED")
+            set_cell(row, headers_norm, "Last Error", "No valid email found")
             if not VERIFY_ONLY:
                 last_col = colnum_to_a1(len(headers_norm))
                 range_name = f"A{row_idx}:{last_col}{row_idx}"
                 batch_ranges.append({"range": range_name, "values": [row]})
             continue
 
-        # 2) Email exists -> resolve body
-        body, body_source = resolve_body(headers_norm, row)
-        _ = body_source
+        # 2) Resolve Body
+        body, _ = resolve_body(headers_norm, row)
 
-        if not body:
-            if VERIFY_ONLY:
-                logging.info(f"[VERIFY_ONLY] Row {row_idx}: FAILED (Missing Draft)")
-            else:
-                set_cell(row, headers_norm, "Send Mode", MODE)
-                set_cell(row, headers_norm, "Send Status", "FAILED")
-                set_cell(row, headers_norm, "Last Error", "Missing Draft Email")
-
+        # If body is missing/invalid
+        if not body or not is_draft_valid(body):
+             set_cell(row, headers_norm, "Send Status", "FAILED")
+             set_cell(row, headers_norm, "Last Error", "Draft invalid")
+             if not VERIFY_ONLY:
                 last_col = colnum_to_a1(len(headers_norm))
                 range_name = f"A{row_idx}:{last_col}{row_idx}"
                 batch_ranges.append({"range": range_name, "values": [row]})
-            continue
+             continue
 
-        # --- SAFETY: validate draft ---
-        if not is_draft_valid(body):
-            if VERIFY_ONLY:
-                logging.info(f"[VERIFY_ONLY] Row {row_idx}: FAILED (Draft too short/invalid)")
-            else:
-                set_cell(row, headers_norm, "Send Mode", MODE)
-                set_cell(row, headers_norm, "Send Status", "FAILED")
-                set_cell(row, headers_norm, "Last Error", "Draft Email missing/too short/invalid")
-
-                last_col = colnum_to_a1(len(headers_norm))
-                range_name = f"A{row_idx}:{last_col}{row_idx}"
-                batch_ranges.append({"range": range_name, "values": [row]})
-            continue
-
-        # Subject (only after draft is valid!)
+        # Subject
         subject = get_cell(row, headers_norm, "Email Subject").strip()
         if not subject:
             subject = default_subject_from_row(headers_norm, row)
@@ -289,6 +263,7 @@ def run_sender_agent() -> None:
             set_cell(row, headers_norm, "Last Error", "")
             logging.info(f"[DRYRUN] Row {row_idx}: Marked PENDING ({to_email})")
         else:
+            # REAL SENDING LOGIC
             attempts_str = get_cell(row, headers_norm, "Send Attempts").strip()
             attempts = int(attempts_str) if attempts_str.isdigit() else 0
 
@@ -301,8 +276,7 @@ def run_sender_agent() -> None:
                     set_cell(row, headers_norm, "Send Attempts", str(attempts))
 
                     logging.info(
-                        f"📤 Sending Row {row_idx} -> to={to_email} | subject='{subject}' | "
-                        f"body_preview='{body[:120].replace(chr(10), ' ')}...'"
+                        f"📤 Sending Row {row_idx} -> to={to_email} | subject='{subject}'"
                     )
 
                     if MODE == "MOCK":
@@ -321,11 +295,9 @@ def run_sender_agent() -> None:
                 set_cell(row, headers_norm, "Send Status", "SENT")
                 set_cell(row, headers_norm, "Last Error", "")
                 set_cell(row, headers_norm, "Last Sent At", get_timestamp_iso())
-
-                curr_count_str = get_cell(row, headers_norm, "Followup Count").strip()
-                curr_count = int(curr_count_str) if curr_count_str.isdigit() else 0
-                set_cell(row, headers_norm, "Followup Count", str(curr_count + 1))
-
+                
+                # Init followup count
+                set_cell(row, headers_norm, "Followup Count", "1") 
                 set_cell(row, headers_norm, "Status", "Follow-up")
 
                 sent_count += 1
@@ -344,7 +316,6 @@ def run_sender_agent() -> None:
             try:
                 ws.batch_update(batch_ranges)
                 batch_ranges = []
-                logging.info(f"☕ Pausing for {BATCH_SLEEP_SEC}s to respect quotas...")
                 time.sleep(BATCH_SLEEP_SEC)
             except Exception as e:
                 logging.error(f"❌ Batch Save Failed: {e}")

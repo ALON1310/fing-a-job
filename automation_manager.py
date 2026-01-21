@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-automation_manager.py (FINAL & SAFE)
+automation_manager.py (DYNAMIC SCHEDULE)
 Daily Logic:
-1. Archive leads with 5+ follow-ups to 'Lost_Leads'.
-2. Send scheduled follow-ups (every 7 days) to 'Follow-up' status leads.
+1. Archive leads with 5 sent emails (Initial + 4 followups) to 'Lost_Leads'.
+2. Send scheduled follow-ups based on specific day intervals.
 """
 
 import os
@@ -23,23 +23,38 @@ load_dotenv()
 setup_logging()
 
 SHEET_NAME = os.getenv("SHEET", "Master_Leads_DB")
-MAX_FOLLOWUPS = 5
-DAYS_BETWEEN_SENDS = 7
+MAX_FOLLOWUPS = 5  # Total emails = Initial (1) + 4 Followups = 5
 MODE = os.getenv("MODE", "DRYRUN").upper()
 
+# --- SCHEDULE CONFIGURATION (The Logic You Requested) ---
+# Key = Current 'Followup Count' in DB
+# Value = Days to wait before sending the NEXT email
+# דוגמה: אם הסטטוס הוא 1 (נשלח רק הראשון), מחכים 2 ימים ושולחים את פולואפ מס' 2.
+WAIT_SCHEDULE = {
+    1: 2,  # After Initial Email -> Wait 2 days -> Send Follow-up 1
+    2: 5,  # After Follow-up 1   -> Wait 5 days -> Send Follow-up 2
+    3: 7,  # After Follow-up 2   -> Wait 7 days -> Send Follow-up 3
+    4: 9   # After Follow-up 3   -> Wait 9 days -> Send Follow-up 4 (Breakup)
+}
+
 # --- TEMPLATES ---
+# Note: {name} = Client Name, {job} = Job Title
 TEMPLATES = {
     2: {
-        "body": "Hi {name},\n\nJust floating this to the top of your inbox in case you missed my previous email.\n\nWould you be open to a quick chat about your hiring needs?\n\nBest,\nAlon"
+        "subject": "Your {job} hire made simple",
+        "body": "Hi {name},\n\nJust checking in! We specialize in experienced Filipino VAs who integrate smoothly and deliver results you can rely on—without the high cost of full-time local hires.\n\nWould you like a quick chat to see if we can help with your {job} role?\n\nBest regards,\nAlon"
     },
     3: {
-        "body": "Hi {name},\n\nI know things get busy, so I'll keep this brief.\n\nI'm still very interested in the position. Are you still looking for help with this?\n\nBest,\nAlon"
+        "subject": "Proven VA support for {job}",
+        "body": "Hi {name},\n\nCompanies in your industry are hiring Filipino VAs with strong domain expertise and seeing reliable results at a fraction of the cost.\n\nI can show you how we tailor VAs specifically for your {job} role and co-manage them to ensure smooth performance.\n\nWould you like a 10–15 minute chat?\n\nBest regards,\nAlon"
     },
     4: {
-        "body": "Hi {name},\n\nChecking in one last time regarding the role.\n\nIf you've already filled it, no worries at all—just let me know so I can stop bothering you!\n\nThanks,\nAlon"
+        "subject": "Still looking for a {job} VA?",
+        "body": "Hi {name},\n\nJust checking if you’re still hiring for {job}. We help companies secure skilled, affordable Filipino VAs with proven experience in their field, fully managed for reliability.\n\nEven a short call can show how we can make this easy for you.\n\nThanks,\nAlon"
     },
     5: {
-        "body": "Hi {name},\n\nSince I haven't heard back, I'll assume this isn't the right time.\n\nI'll stop following up now, but feel free to reach out in the future if you need a strong developer.\n\nBest of luck,\nAlon"
+        "subject": "Closing the loop on {job}",
+        "body": "Hi {name},\n\nSince I haven't heard back, I assume you’ve likely filled the {job} position or put it on hold.\n\nI won’t fill up your inbox any further, but please keep us in mind if you ever need a hand finding top-tier Filipino VAs in the future—fully managed and reliable.\n\nAll the best,\nAlon"
     }
 }
 
@@ -59,16 +74,14 @@ def process_daily_automation():
 
         df = pd.DataFrame(data)
         
-        # Ensure columns exist in DataFrame for logic calculation
-        for col in ["Followup Count", "Last Sent At", "Status", "Contact Info", "Email Subject", "Job Title"]:
+        # Ensure columns exist
+        for col in ["Followup Count", "Last Sent At", "Status", "Contact Info", "Job Title"]:
             if col not in df.columns:
                 df[col] = ""
 
-        # --- CRITICAL FIX: Safe Column Mapping ---
-        # Read the actual header row from Sheets to ensure we write to the correct cells
+        # --- Safe Column Mapping ---
         header_row = ws.row_values(1)
         try:
-            # Finding 1-based index for Gspread directly from the sheet headers
             idx_sent_at = header_row.index("Last Sent At") + 1
             idx_count = header_row.index("Followup Count") + 1
             idx_status = header_row.index("Send Status") + 1
@@ -90,9 +103,9 @@ def process_daily_automation():
         status = str(row["Status"]).strip()
         contact = str(row["Contact Info"]).strip()
         last_sent = str(row["Last Sent At"]).strip()
+        job_title = str(row["Job Title"]).strip() or "your role"
         
         try:
-            # Handle empty or non-numeric count safely
             raw_count = row["Followup Count"]
             if raw_count == "" or raw_count is None:
                 count = 0
@@ -104,11 +117,12 @@ def process_daily_automation():
         email = extract_email(contact)
 
         # -------------------------------------------------------
-        # LOGIC 1: ARCHIVE LOST LEADS
+        # LOGIC 1: ARCHIVE LOST LEADS (After 5 emails total)
         # -------------------------------------------------------
         if status == "Follow-up" and count >= MAX_FOLLOWUPS:
             days_since = get_days_diff(last_sent)
             
+            # Archive only if 3 days passed since the last email (break-up email)
             if days_since >= 3: 
                 logging.info(f"🗑️ Archiving Row {row_num} (Max followups reached)")
                 
@@ -121,13 +135,15 @@ def process_daily_automation():
                 continue
 
         # -------------------------------------------------------
-        # LOGIC 2: SEND FOLLOW-UP
+        # LOGIC 2: SEND SCHEDULED FOLLOW-UP
         # -------------------------------------------------------
         if status == "Follow-up" and email and count < MAX_FOLLOWUPS:
             days_since = get_days_diff(last_sent)
             
-            # Check if enough days passed (Default: 7)
-            if days_since >= DAYS_BETWEEN_SENDS:
+            # --- DYNAMIC SCHEDULE CHECK ---
+            required_wait_days = WAIT_SCHEDULE.get(count, 7) # Default to 7 if logic fails
+            
+            if days_since >= required_wait_days:
                 next_stage = count + 1
                 template = TEMPLATES.get(next_stage)
                 
@@ -135,32 +151,31 @@ def process_daily_automation():
                     logging.warning(f"No template for stage {next_stage}")
                     continue
                 
-                # Determine Name
-                body = template["body"].format(name="there") 
-                
-                # Handle Subject (Re:)
-                orig_subject = str(row.get("Email Subject", "")).replace("Re: ", "")
-                subject = f"Re: {orig_subject}" if orig_subject else "Quick follow up"
+                # Prepare content
+                try:
+                    body = template["body"].format(name="there", job=job_title)
+                    subject = template["subject"].format(job=job_title)
+                except KeyError as e:
+                    logging.error(f"Template Error row {row_num}: {e}")
+                    continue
 
-                logging.info(f"📧 Sending Follow-up #{next_stage} to {email}...")
+                logging.info(f"📧 Sending Follow-up #{next_stage} to {email} (Waited {days_since} days) | Subject: {subject}")
 
                 if MODE == "REAL":
                     try:
                         send_real(email, subject, body)
                         
-                        # --- SAFE UPDATE USING MAPPED INDICES ---
-                        # We use the indices we found at the start of the script
                         ws.update_cell(row_num, idx_sent_at, get_timestamp_iso())
                         ws.update_cell(row_num, idx_count, next_stage)
                         ws.update_cell(row_num, idx_status, "SENT_AUTO")
                         
                         logging.info("✅ Sent & Updated!")
-                        time.sleep(2) # Be gentle with API
+                        time.sleep(2) 
                         
                     except Exception as e:
                         logging.error(f"❌ Failed to send: {e}")
                 else:
-                    logging.info(f"[DRYRUN] Would send Follow-up #{next_stage} to {email}")
+                    logging.info(f"[DRYRUN] Would send Follow-up #{next_stage}")
 
     # -------------------------------------------------------
     # EXECUTE ARCHIVE
@@ -176,7 +191,6 @@ def process_daily_automation():
             logging.info(f"📦 Moving {len(rows_to_archive)} rows to Lost_Leads...")
             lost_sheet.append_rows(rows_to_archive)
             
-            # Delete from main sheet (Reverse order is critical!)
             for idx in sorted(rows_to_delete_indices, reverse=True):
                 ws.delete_rows(idx)
                 logging.info(f"❌ Deleted row {idx} from active sheet")

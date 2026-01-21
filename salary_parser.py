@@ -2,6 +2,7 @@
 """
 Salary parsing and filtering using a deterministic regex-based pipeline.
 IMPROVED VERSION: Aggressive normalization to Monthly USD.
+STRICTNESS UPDATE: Minimum base is set to $8/hr (~$1280/mo).
 
 Pipeline:
 1) Normalize text to lowercase.
@@ -9,7 +10,7 @@ Pipeline:
 3) Extract numbers reliably (handling '2$').
 4) Logic/Inference:
    - Convert PHP to USD.
-   - Convert Hourly to Monthly.
+   - Convert Hourly to Monthly (x160).
    - Heuristic: If value is too low (<$100), assume it's hourly.
 5) Final Threshold Check.
 """
@@ -176,12 +177,13 @@ def build_salary_facts(raw: str) -> Optional[SalaryFacts]:
 
 def is_salary_too_low(
     salary_str: str,
-    min_monthly_usd: float = 900.0,
-    min_monthly_php: float = 50000.0, # Kept for API compatibility, but we use USD internally
+    min_monthly_usd: float = 1280.0,  # <--- UPDATED: $8/hr * 160h = $1280
+    min_monthly_php: float = 70000.0, # Updated to match approx $1280 USD
     unknown_policy: str = "keep",
 ) -> bool:
     """
     Returns True if the salary is DEFINITELY too low.
+    Default threshold is now ~$1280/month (which equals $8/hour).
     """
     # Special bypass for text-only salaries
     s_lower = str(salary_str).lower()
@@ -194,7 +196,7 @@ def is_salary_too_low(
         # If we couldn't parse any number, follow policy
         return unknown_policy == "skip"
 
-    # BUFFER: We allow 5% margin of error
+    # BUFFER: We allow 5% margin of error (so ~$7.60/hr might slip through, but $7.00 won't)
     threshold = min_monthly_usd * 0.95
     
     if facts.estimated_monthly_usd < threshold:
