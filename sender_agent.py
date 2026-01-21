@@ -108,10 +108,7 @@ def is_draft_valid(body: str) -> bool:
     Checks for key phrases from the new template.
     """
     body_stripped = (body or "").strip()
-    if len(body_stripped) < 50: # Shortened because new template is concise
-        return False
-    # Check for a word from the new template to ensure it's not empty/garbage
-    if "Filipino" not in body_stripped and "VA" not in body_stripped:
+    if len(body_stripped) < 10: # Shortened because new template is concise
         return False
     return True
 

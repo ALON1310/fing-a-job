@@ -371,7 +371,7 @@ def run_job_seeker_agent() -> None:
                             hook=str(ai_data.get("hook", "") or ""),
                         )
 
-                        email_subject = f"Quick question about your {title} role"
+                        email_subject = f"Top Filipino VA for your {title}"
 
                         batch.append({
                             "Job Title": title,
