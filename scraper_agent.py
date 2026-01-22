@@ -9,7 +9,7 @@ from typing import Dict, Any, Set, List, Callable, Tuple, Optional
 from dotenv import load_dotenv
 from openai import OpenAI
 from playwright.sync_api import sync_playwright
-from schedule import logger
+# DELETED: from schedule import logger  <-- This was causing the error
 from sheets_client import get_sheet_client
 
 # --- NEW: Import shared tools ---
@@ -270,9 +270,11 @@ def run_job_seeker_agent() -> None:
             
             try:
                 page.wait_for_selector(".jobpost-cat-box, .job-post-snippet", timeout=20000)
-                logger.info("✅ Landed on Job Search page successfully.")
+                # FIXED: Changed logger.info to logging.info
+                logging.info("✅ Landed on Job Search page successfully.")
             except Exception:
-                logger.warning("⚠️ Might not be on the search page yet, attempting to force search...")
+                # FIXED: Changed logger.warning to logging.warning
+                logging.warning("⚠️ Might not be on the search page yet, attempting to force search...")
 
             # 3) SCANNING LOOP
             batch: List[Dict[str, Any]] = []
