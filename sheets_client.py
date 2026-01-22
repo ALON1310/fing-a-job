@@ -3,6 +3,10 @@ import json
 import gspread
 import streamlit as st
 from google.oauth2.service_account import Credentials
+from dotenv import load_dotenv  # Added to support .env files locally
+
+# Load environment variables from .env file (if it exists)
+load_dotenv()
 
 def get_sheet_client():
     """
@@ -19,11 +23,10 @@ def get_sheet_client():
     ]
 
     # --- OPTION A: STREAMLIT SECRETS (Cloud) ---
-    # Checks if running on Streamlit Cloud with configured secrets
-    # We wrap this in a try-except block because accessing st.secrets 
-    # locally without a secrets.toml file causes a crash.
+    # Attempt to load from Streamlit Secrets (only if running on Streamlit Cloud)
     try:
-        if "GCP_SERVICE_ACCOUNT" in st.secrets:
+        # Check if 'secrets' attribute exists to avoid local errors
+        if hasattr(st, "secrets") and "GCP_SERVICE_ACCOUNT" in st.secrets:
             try:
                 # Convert Streamlit's internal object to a standard dictionary
                 creds_dict = dict(st.secrets["GCP_SERVICE_ACCOUNT"])
@@ -37,11 +40,11 @@ def get_sheet_client():
             except Exception as e:
                 print(f"⚠️ Found secrets but failed to load: {e}")
     except (FileNotFoundError, KeyError, Exception):
-        # This catches the "No secrets found" error locally so we can proceed to Option B/C
+        # Gracefully fail if not on Streamlit or secrets are missing
         pass
 
     # --- OPTION B: ENVIRONMENT VARIABLE (GitHub Actions) ---
-    # Checks for a raw JSON string injected via environment variable
+    # Check for a raw JSON string injected via environment variable
     json_creds = os.getenv("GCP_SERVICE_ACCOUNT")
     if json_creds:
         try:
@@ -49,10 +52,10 @@ def get_sheet_client():
             creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
             return gspread.authorize(creds)
         except json.JSONDecodeError:
-            pass # Not a valid JSON string, skip to next option
+            pass # Not a valid JSON string, skip to the next option
 
     # --- OPTION C: LOCAL FILE (Local Dev) ---
-    # Checks for the physical credentials.json file on the disk
+    # Check for the physical credentials.json file on the disk
     creds_file = "credentials.json"
     if os.path.exists(creds_file):
         creds = Credentials.from_service_account_file(creds_file, scopes=scopes)
