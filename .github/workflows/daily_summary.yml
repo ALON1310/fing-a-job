@@ -3,7 +3,7 @@ name: Daily Summary Email
 on:
   # 1. Trigger: Runs immediately after "Daily Initial Outreach (Sender Agent)" completes
   workflow_run:
-    workflows: ["Daily Initial Outreach (Sender Agent)"] # חייב להיות זהה לשם בקובץ השולח
+    workflows: ["Daily Initial Outreach (Sender Agent)"] 
     types:
       - completed
   
@@ -16,9 +16,12 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     
+    permissions:
+      contents: read  # ✅ הוספתי הרשאה מפורשת לקריאת הקוד (למנוע בעיות גישה)
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4  # ✅ שודרג מ-v3 ל-v4 (יציב יותר)
 
       - name: Set up Python
         uses: actions/setup-python@v4
