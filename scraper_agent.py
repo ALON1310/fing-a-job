@@ -105,39 +105,69 @@ def get_existing_links() -> Set[str]:
 
 
 def save_to_google_sheets(new_leads: List[Dict[str, Any]]) -> None:
-    """Append new leads to Google Sheets with CORRECT column alignment."""
+    """
+    Append new leads to Google Sheets using DYNAMIC column mapping.
+    It reads the headers first to ensure data goes into the correct columns,
+    regardless of their order.
+    """
     if not new_leads:
         return
+
     logging.info(f"🧾 Saving {len(new_leads)} leads to Cloud...")
+
     try:
         gs_client = get_sheet_client()
         sheet = gs_client.open(GOOGLE_SHEET_NAME).sheet1
-        rows = []
+
+        # 1. Read current headers from the sheet (Row 1)
+        headers = sheet.row_values(1)
+
+        rows_to_append = []
+
         for lead in new_leads:
-            rows.append([
-                lead.get("Job Title", ""),       # A
-                lead.get("Salary", ""),          # B
-                lead.get("Post Date", ""),       # C
-                lead.get("Contact Info", ""),    # D
-                lead.get("Link", ""),            # E
-                lead.get("Description", ""),     # F
-                "New",                           # G
-                "Unassigned",                    # H
-                lead.get("Notes", ""),           # I
-                "",                              # J (Send Mode)
-                "",                              # K (Send Status)
-                "",                              # L (Send Attempts)
-                "",                              # M (Last Error)
-                "",                              # N (Last Sent At)
-                lead.get("Draft Email", ""),     # O (Draft Email)
-                lead.get("Email Subject", "")    # P (Email Subject)
-            ])
-        sheet.append_rows(rows)
-        logging.info(f"✅ Successfully uploaded {len(rows)} leads.")
+            # Create an empty row matching the number of columns found
+            row = [""] * len(headers)
+
+            # Internal helper to safely place data into the correct index
+            def set_val(col_name: str, val: Any):
+                if col_name in headers:
+                    idx = headers.index(col_name)
+                    row[idx] = str(val)
+
+            # 2. Map data to column names (Safe & Dynamic)
+            
+            # --- Scraper Data ---
+            set_val("Job Title", lead.get("Job Title", ""))
+            set_val("Salary", lead.get("Salary", ""))
+            set_val("Post Date", lead.get("Post Date", ""))
+            set_val("Contact Info", lead.get("Contact Info", ""))
+            set_val("Link", lead.get("Link", ""))
+            set_val("Description", lead.get("Description", ""))
+            
+            # This fixes the swap issue: it specifically looks for "Draft Email" column
+            set_val("Draft Email", lead.get("Draft Email", ""))
+            set_val("Email Subject", lead.get("Email Subject", ""))
+            set_val("Notes", lead.get("Notes", ""))
+
+            # --- System Defaults (Required for new leads) ---
+            set_val("Status", "New")
+            set_val("Followup Count", "0")
+            set_val("Send Status", "")      # Leave empty so Sender Agent picks it up
+            set_val("Send Attempts", "0")
+            set_val("Last Error", "")
+
+            rows_to_append.append(row)
+
+        # 3. Save all rows at once (Batch)
+        sheet.append_rows(rows_to_append)
+        logging.info(f"✅ Successfully uploaded {len(rows_to_append)} leads (Dynamic Mapping).")
+
     except Exception as e:
         logging.error(f"❌ Sheet Error: {e}")
 
+# -----------------------------
 
+# 5) HELPERS (AI Extraction & Contact Normalization)
 def normalize_contact(contact: object) -> str:
     if contact is None:
         return "None"
