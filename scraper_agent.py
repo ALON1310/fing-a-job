@@ -172,9 +172,9 @@ def extract_data_with_ai(job_description: str, job_title: str) -> Dict[str, Any]
     def _call_openai() -> Dict[str, Any]:
         prompt = (
             f"Analyze this job description for a '{job_title}' role.\n"
-            "1) Extract DIRECT contact info (Email, Phone, Telegram, IG). If none, 'None'.\n"
+            "1) Extract DIRECT contact info (Email, Phone, Telegram, IG, Linkdin). If none, 'None'.\n"
             "2) Extract First Name of hiring manager. If none, 'there'.\n"
-            "3) Write 1 personalized sentence based on technical requirements.\n"
+            "3) Write 1 short, punchy sentence (max 12 words) mentioning ONLY the single most important skill or tool they are looking for.\n"
             "Return JSON: {'contact': ..., 'name': ..., 'hook': ...}"
         )
         res = client.chat.completions.create(
@@ -423,4 +423,4 @@ def run_job_seeker_agent() -> None:
 
 
 if __name__ == "__main__":
-    run_job_seeker_agent()
+    run_job_seeker_agent() 
