@@ -1,16 +1,17 @@
 # salary_parser.py
 """
-Salary parsing and filtering using a deterministic regex-based pipeline.
-STRICT VERSION: Hard limit of $8/hr (~$1280/mo). No buffers.
+Salary parsing and filtering (STRICT $8/HR VERSION).
 
-Pipeline:
-1) Normalize text to lowercase.
-2) Detect currency (USD/PHP) & Unit (Hour/Month).
-3) Extract numbers reliably.
-4) Logic/Inference:
-   - Convert PHP to USD.
-   - Convert Hourly to Monthly (x160).
-5) Final Threshold Check.
+Thresholds:
+- Hourly: $8.00
+- Weekly: $320.00 (8 * 40)
+- Monthly: $1,280.00 (8 * 160)
+
+Logic Pipeline:
+1. Normalize text & Extract numbers.
+2. Detect Currency (USD/PHP) & Unit (Hour/Week/Month).
+3. Convert EVERYTHING to a normalized Monthly USD value.
+4. Compare against STRICT threshold ($1280).
 """
 
 from __future__ import annotations
@@ -24,8 +25,12 @@ from typing import Optional, List, Dict
 # Constants
 # ---------------------------------------------------------------------
 
-HOURS_PER_MONTH = 160.0      # Standard full-time hours
-PHP_TO_USD_RATE = 56.0       # Average exchange rate (1 USD = ~56 PHP)
+HOURS_PER_MONTH = 160.0      # Standard full-time hours (4 weeks * 40 hours)
+WEEKS_PER_MONTH = 4.0        # Simplified for filtering safety
+PHP_TO_USD_RATE = 56.0       # Conservative exchange rate
+
+# STRICT DEFAULT THRESHOLD ($8/hr * 160hr = $1280/mo)
+DEFAULT_MIN_USD = 1280.0 
 
 # ---------------------------------------------------------------------
 # Regex patterns
@@ -43,7 +48,7 @@ UNIT_PATTERNS: Dict[str, re.Pattern] = {
     "year": re.compile(r"(?:/yr|/year|per year|yearly|/y\b|annum)"),
 }
 
-# Special catch for "2$ hour" format
+# Catch format like "2$ hour" which is common garbage
 BAD_FORMAT_HOURLY = re.compile(r"\d+\s*\$\s*hour")
 
 # ---------------------------------------------------------------------
@@ -55,7 +60,6 @@ class SalaryFacts:
     currency: str
     unit: str
     amount: float
-    is_hourly_heuristic: bool
     estimated_monthly_usd: float
     raw: str
 
@@ -97,18 +101,40 @@ def calculate_monthly_usd(amount: float, currency: str, unit: str) -> float:
     if currency == "php":
         val_usd = amount / PHP_TO_USD_RATE
     
-    # 2. Convert Time Unit to Monthly
+    # ---------------------------------------------------------
+    # SMART UNIT CORRECTION (Prevent Logic Errors)
+    # ---------------------------------------------------------
+    
+    # Case A: Logic thinks it's Hourly, but number is huge.
+    # e.g., "330" USD (detected as hour by mistake or no unit).
+    # If someone asks for > $100/hr ($16,000/mo) for a VA role, it's likely a monthly salary typo.
+    if unit == "hour" and val_usd > 100: 
+        logging.debug(f"   ⚠️ Heuristic: ${val_usd}/hr is improbably high. Treating as MONTHLY.")
+        unit = "month"
+
+    # Case B: Logic thinks it's Monthly, but number is tiny.
+    # e.g., "$8" (detected as month). Nobody works for $8/month. It's likely hourly.
+    elif unit == "month" and val_usd < 100:
+        logging.debug(f"   ⚠️ Heuristic: ${val_usd}/mo is improbably low. Treating as HOURLY.")
+        unit = "hour"
+        
+    # Case C: Unknown unit
+    elif unit == "unknown":
+        if val_usd < 100: # Below $100 -> Assume Hourly
+            unit = "hour"
+        else:             # Above $100 -> Assume Monthly
+            unit = "month"
+
+    # ---------------------------------------------------------
+    # 2. Normalize to Monthly USD
+    # ---------------------------------------------------------
     if unit == "hour":
-        val_usd = val_usd * HOURS_PER_MONTH
+        val_usd = val_usd * HOURS_PER_MONTH  # x 160
     elif unit == "week":
-        val_usd = val_usd * 4.33
+        val_usd = val_usd * WEEKS_PER_MONTH  # x 4
     elif unit == "year":
         val_usd = val_usd / 12.0
     
-    # 3. Heuristic: If result < 100, assume hourly
-    if val_usd < 100.0 and val_usd > 0:
-        val_usd = val_usd * HOURS_PER_MONTH
-        
     return val_usd
 
 # ---------------------------------------------------------------------
@@ -127,10 +153,10 @@ def build_salary_facts(raw: str) -> Optional[SalaryFacts]:
     if not nums:
         return None
         
-    # Take the MAX value (benefit of the doubt for ranges)
-    # e.g., "$3 - $10" -> checks $10.
+    # Take the MAX value (benefit of the doubt for ranges like "$500 - $1000")
     amount = max(nums)
 
+    # Fallback currency logic
     if currency == "unknown":
         if amount > 5000: 
             currency = "php"
@@ -143,7 +169,6 @@ def build_salary_facts(raw: str) -> Optional[SalaryFacts]:
         currency=currency,
         unit=unit,
         amount=amount,
-        is_hourly_heuristic=(monthly_usd != amount and unit == "unknown"),
         estimated_monthly_usd=monthly_usd,
         raw=raw
     )
@@ -154,26 +179,27 @@ def build_salary_facts(raw: str) -> Optional[SalaryFacts]:
 
 def is_salary_too_low(
     salary_str: str,
-    min_monthly_usd: float = 1280.0,  # Exactly $8/hr * 160
+    min_monthly_usd: float = DEFAULT_MIN_USD, # Default is now $1280
     min_monthly_php: float = 70000.0,
     unknown_policy: str = "keep",
 ) -> bool:
     """
-    Returns True if the salary is strictly below the threshold.
+    Returns True if the salary is strictly below $8/hr ($1280/mo).
     """
     s_lower = str(salary_str).lower()
-    if "negotiable" in s_lower or "doe" in s_lower or "tbd" in s_lower:
+    
+    # 1. Skip logic for text-only salaries (Negotiable/DOE)
+    if not salary_str or "negotiable" in s_lower or "doe" in s_lower or "tbd" in s_lower:
         return False
 
     facts = build_salary_facts(salary_str)
     
     if not facts:
+        # If parsable numbers are missing, decide based on policy
         return unknown_policy == "skip"
 
-    # STRICT CHECK: No buffer.
-    # $6/hr -> $960 -> Rejected
-    # $7/hr -> $1120 -> Rejected
-    # $8/hr -> $1280 -> Passed
+    # 2. THE CHECK
+    # Strict comparison against threshold
     if facts.estimated_monthly_usd < min_monthly_usd:
         logging.info(f"   📉 Salary Rejected: '{salary_str}' (~${int(facts.estimated_monthly_usd)}/mo < ${int(min_monthly_usd)})")
         return True
