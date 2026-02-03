@@ -11,7 +11,7 @@ openai
 playwright
 
 # --- UI / Dashboard ---
-streamlit
+streamlit>=1.41.0
 
 # --- Utilities ---
 colorlog
