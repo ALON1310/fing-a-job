@@ -87,6 +87,24 @@ def canonical_job_url(url: str) -> str:
     job_id = m.group(1)
     return f"https://www.onlinejobs.ph/jobseekers/job/{job_id}"
 
+def is_commission_based(title: str, description: str = "") -> bool:
+    """Return True if job indicates commission / profit share based payment."""
+
+    text = f"{title} {description}".lower()
+
+    keywords = [
+        "commission based",
+        "commission-only",
+        "commission only",
+        "100% commission",
+        "commission structure",
+        "profit share",
+        "profit sharing",
+        "profit-share"
+    ]
+
+    return any(k in text for k in keywords)
+
 
 def get_existing_links() -> Set[str]:
     """Download existing links from Google Sheets to memory."""
@@ -372,6 +390,15 @@ def run_job_seeker_agent() -> None:
                         title = "N/A"
                         if p2.locator("h1").count() > 0:
                             title = p2.locator("h1").first.inner_text() or "N/A"
+
+                        title = "N/A"
+                        if p2.locator("h1").count() > 0:
+                            title = p2.locator("h1").first.inner_text() or "N/A"
+
+                        if is_commission_based(title, desc):
+                            logging.info("⛔ Commission / Profit share job -> skipped.")
+                            p2.close()
+                            continue
 
                         # ✅ FIX: Use salary_parser module with thresholds + policy
                         if salary_parser.is_salary_too_low(
